@@ -143,10 +143,6 @@ function jsonpSheetStatus(r,timeoutMs=8000){
 
 async function postSheet(r){
   try{
-    // Primeiro verifica se a presença já está no Sheets.
-    let before=await jsonpSheetStatus(r,5000);
-    if(before && before.found) return {ok:true,duplicate:true};
-
     // Envio "no-cors": o navegador não precisa ler a resposta.
     const body=new URLSearchParams({payload:JSON.stringify(r)});
     await fetch(SHEETS_WEBAPP_URL,{
@@ -156,18 +152,14 @@ async function postSheet(r){
       body:body.toString()
     });
 
-    // Tenta confirmar de verdade consultando a planilha pelo event_id ou ID+data.
-    // Essa consulta usa um <script> (JSONP) porque o Apps Script não libera CORS
-    // para leitura via fetch(). Em alguns navegadores/antivírus esse script de
-    // confirmação é bloqueado mesmo quando a gravação em si funcionou — então,
-    // se o envio (POST acima) não deu erro, tratamos como enviado com sucesso
-    // mesmo sem conseguir confirmar, para não ficar "Pendente" pra sempre com
-    // o dado já salvo na planilha. Uma nova tentativa de confirmação roda
-    // sozinha na próxima sincronização automática.
-    await new Promise(res=>setTimeout(res,900));
-    let after=await jsonpSheetStatus(r,7000);
-    if(after && after.found) return {ok:true,duplicate:!!after.duplicate};
-    return {ok:true,duplicate:false,unconfirmed:true,error:(after&&after.error)||'envio feito, confirmação pendente'};
+    // Não dependemos mais de confirmar via JSONP (carregar a URL do Apps
+    // Script dentro de um <script>): esse redirecionamento de
+    // script.google.com para script.googleusercontent.com é bloqueado em
+    // alguns navegadores/redes por política de cookies de terceiros, mesmo
+    // quando o envio em si funciona. Como o Apps Script já deduplica por
+    // event_id no servidor, reenviar numa tentativa futura nunca cria linha
+    // repetida — então tratamos "enviou sem erro de rede" como sucesso.
+    return {ok:true};
   }catch(e){
     return {ok:false,error:String((e&&e.message)||e)};
   }
