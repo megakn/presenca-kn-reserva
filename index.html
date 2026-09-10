@@ -178,14 +178,17 @@ async function syncPending(){
   syncing=true;
   let regs=loadRegs().map(normalizeOld), changed=false;
   try{
-    for(const r of regs.filter(x=>x.principalSync!=='synced' || x.sheetSync!=='synced')){
+    for(const r of regs.filter(x=>x.principalSync!=='synced' || x.sheetSync!=='synced' || x.sheetUnconfirmed)){
       if(r.principalSync!=='synced'){
         const p=await syncPrincipal(r);
         r.principalSync=p.ok?'synced':'pending';
         r.principalError=p.ok?'':(p.error||'erro no Principal');
         changed=true;
       }
-      if(r.sheetSync!=='synced'){
+      // Reenvia enquanto não sincronizou OU enquanto sincronizou mas ainda sem
+      // confirmação (o servidor deduplica por event_id/ID+data, então reenviar
+      // não cria linha repetida — só tenta de novo confirmar em segundo plano).
+      if(r.sheetSync!=='synced' || r.sheetUnconfirmed){
         const s=await postSheet(r);
         r.sheetSync=s.ok?'synced':'pending';
         r.sheetUnconfirmed=!!(s.ok && s.unconfirmed);
