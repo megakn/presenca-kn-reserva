@@ -424,47 +424,138 @@ async function renderHistory(){
 }
 
 const SHIFT_TIMES=[
-  {key:'05:00:00',label:'05:00'},
-  {key:'06:00:00',label:'06:00'},
-  {key:'08:00:00',label:'08:00'},
-  {key:'13:00:00',label:'13:00'},
-  {key:'14:00:00',label:'14:00'},
-  {key:'22:30:00',label:'22:30'},
-  {key:'23:00:00',label:'23:00'}
+  {key:'05:00',label:'05:00'},
+  {key:'06:00',label:'06:00'},
+  {key:'08:00',label:'08:00'},
+  {key:'13:00',label:'13:00'},
+  {key:'14:00',label:'14:00'},
+  {key:'22:30',label:'22:30'},
+  {key:'23:00',label:'23:00'}
 ];
 let shiftRefreshBusy=false,shiftLastRefresh=0;
+let lastTodayPresenceCount=0;
 
-function shiftCountsFromPresentIds(presentIds){
-  const rows=SHIFT_TIMES.map(s=>{
-    const people=ROSTER.filter(p=>String(p.horario||'').trim()===s.key);
-    const qty=people.length;
-    const present=people.reduce((n,p)=>n+(presentIds.has(String(p.id||p.grootId))?1:0),0);
-    return {label:s.label,qty,present,pending:Math.max(0,qty-present)};
+function normalizeShiftTime(p){
+  // Primeiro usa o campo horário do banco, aceitando 5:00, 05:00, 05:00:00 etc.
+  let raw=String((p&&p.horario)||'').trim();
+  let m=raw.match(/(?:^|\D)(\d{1,2})[:hH](\d{2})(?::\d{2})?/);
+  if(m){
+    return String(Number(m[1])).padStart(2,'0')+':'+m[2];
+  }
+  // Segurança: se o horário estiver vazio/mal formatado, usa o PRIMEIRO horário da escala.
+  raw=String((p&&p.escala)||'');
+  m=raw.match(/(?:^|\D)(\d{1,2})H(?:\s*\/|\s|$)/i);
+  if(m){
+    return String(Number(m[1])).padStart(2,'0')+':00';
+  }
+  // Caso especial para escala 22H cadastrada com entrada real 22:30.
+  if(/(?:^|\D)22H(?:\s*\/|\s|$)/i.test(raw)) return '22:30';
+  return '';
+}
+
+function timeToMinutes(t){
+  const m=String(t||'').match(/^(\d{1,2}):(\d{2})/);
+  return m ? Number(m[1])*60+Number(m[2]) : -1;
+}
+
+function currentMinutes(){
+  const d=new Date();
+  return d.getHours()*60+d.getMinutes();
+}
+
+function recordBelongsToTodayShift(rec,shift){
+  const recMin=timeToMinutes(rec.time||rec.hora);
+  if(recMin<0)return false;
+  const start=timeToMinutes(shift);
+  if(start<0)return false;
+
+  // Janela do turno DO DIA. Aceita chegada até 2h antes.
+  // Isso evita que batidas depois da meia-noite do turno de ontem
+  // apareçam como presença do turno noturno de hoje.
+  const windowStart=Math.max(0,start-120);
+  const nowMin=currentMinutes();
+
+  // Se o turno de hoje ainda nem chegou à janela de entrada, presença = 0.
+  if(nowMin<windowStart)return false;
+
+  return recMin>=windowStart;
+}
+
+function mergeTodayRecords(localRegs,remoteRows,today){
+  const byPerson=new Map();
+
+  (localRegs||[]).filter(r=>r.date===today).forEach(r=>{
+    const id=String(r.personId||r.grootId||'');
+    if(!id)return;
+    byPerson.set(id,{personId:id,time:String(r.time||''),source:'local'});
   });
+
+  (remoteRows||[]).forEach(r=>{
+    const id=String(r.colaborador_id||'');
+    if(!id)return;
+    const candidate={personId:id,time:String(r.hora||''),source:'principal'};
+    const old=byPerson.get(id);
+    // Prefere o registro com horário disponível/mais recente.
+    if(!old || timeToMinutes(candidate.time)>=timeToMinutes(old.time)) byPerson.set(id,candidate);
+  });
+
+  return byPerson;
+}
+
+function calculateTodayShiftRows(recordsByPerson){
+  const rows=SHIFT_TIMES.map(s=>{
+    const people=ROSTER.filter(p=>normalizeShiftTime(p)===s.key);
+    const qty=people.length;
+    let present=0;
+
+    people.forEach(p=>{
+      const id=String(p.id||p.grootId);
+      const rec=recordsByPerson.get(id);
+      if(rec && recordBelongsToTodayShift(rec,s.key)) present++;
+    });
+
+    return {label:s.label,key:s.key,qty,present,pending:Math.max(0,qty-present)};
+  });
+
+  lastTodayPresenceCount=rows.reduce((n,r)=>n+r.present,0);
+  return rows;
+}
+
+function drawShiftRows(rows){
   $('shiftBody').innerHTML=rows.map(r=>`<tr><td><b>${r.label}</b></td><td class="qty">${r.qty}</td><td class="present">${r.present}</td><td class="pendingShift">${r.pending}</td></tr>`).join('');
 }
 
-async function renderShiftTable(force=false){
+async function getTodayOperationalData(){
+  const today=nowParts().date;
+  const localRegs=loadRegs().map(normalizeOld);
+  let remote=[];
+  let source='local';
+
+  if(navigator.onLine){
+    try{
+      remote=await principalHistory(today);
+      source='Principal + local';
+    }catch(e){
+      source='local';
+    }
+  }
+
+  const recordsByPerson=mergeTodayRecords(localRegs,remote,today);
+  const rows=calculateTodayShiftRows(recordsByPerson);
+  return {today,localRegs,remote,recordsByPerson,rows,source};
+}
+
+async function renderShiftTable(force=false,data=null){
   if(!$('shiftBody')||shiftRefreshBusy)return;
   const now=Date.now();
-  if(!force && now-shiftLastRefresh<3000)return;
+  if(!force && !data && now-shiftLastRefresh<3000)return;
   shiftLastRefresh=now;
   shiftRefreshBusy=true;
-  const today=nowParts().date;
+
   try{
-    const presentIds=new Set(loadRegs().map(normalizeOld).filter(r=>r.date===today).map(r=>String(r.personId)));
-    let source='local';
-    if(navigator.onLine){
-      try{
-        const remote=await principalHistory(today);
-        remote.forEach(r=>presentIds.add(String(r.colaborador_id||'')));
-        source='Principal + local';
-      }catch(e){
-        source='local';
-      }
-    }
-    shiftCountsFromPresentIds(presentIds);
-    $('shiftSource').textContent=(rosterSource==='banco'?'Cadastro Principal • ':'Cadastro local • ')+source;
+    const d=data||await getTodayOperationalData();
+    drawShiftRows(d.rows);
+    $('shiftSource').textContent=(rosterSource==='banco'?'Cadastro Principal • ':'Cadastro local • ')+d.source+' • hoje';
   }finally{
     shiftRefreshBusy=false;
   }
@@ -472,20 +563,17 @@ async function renderShiftTable(force=false){
 
 async function render(){
   let regs=loadRegs().map(normalizeOld),today=nowParts().date,todayRegs=regs.filter(r=>r.date===today);
+
   $('rosterCount').textContent=ROSTER.length;
   $('netDot').className='dot '+(navigator.onLine?'online':'offline');
   $('netText').textContent=navigator.onLine?'Online':'Offline';
 
-  // Cards de presença: usa local + Principal e elimina duplicidade por colaborador.
-  const presentIds=new Set(todayRegs.map(r=>String(r.personId)));
-  if(navigator.onLine){
-    try{
-      const remote=await principalHistory(today);
-      remote.forEach(r=>presentIds.add(String(r.colaborador_id||'')));
-    }catch(e){}
-  }
-  const presentCount=Array.from(presentIds).filter(Boolean).length;
+  // Usa a mesma regra da tabela por horários para os cards:
+  // somente presença pertencente aos turnos DO DIA.
+  const dayData=await getTodayOperationalData();
+  const presentCount=dayData.rows.reduce((n,r)=>n+r.present,0);
   const pendingPeople=Math.max(0,ROSTER.length-presentCount);
+
   $('todayCount').textContent=presentCount;
   $('pendingCount').textContent=pendingPeople;
 
@@ -499,7 +587,7 @@ async function render(){
   if($('todayChip'))$('todayChip').textContent=todayRegs.length+' registro'+(todayRegs.length===1?'':'s')+' hoje';
 
   renderHistory();
-  renderShiftTable();
+  renderShiftTable(true,dayData);
 }
 function exportCsv(){let regs=loadRegs().map(normalizeOld);let rows=[['event_id','groot_id','matricula','ext','nome','escala','data','hora','origem','dispositivo','principal_sync','sheets_sync'],...regs.map(r=>[r.eventId,r.grootId,r.matricula,r.ext,r.nome,r.escala,r.date,r.time,'RESERVA',r.deviceId,r.principalSync,r.sheetSync])];let csv=rows.map(row=>row.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\n');let blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='presenca_kn_reserva_v4_'+nowParts().date+'.csv';a.click();URL.revokeObjectURL(a.href)}
 async function startCamera(){if(!('BarcodeDetector' in window)){showResult(null,'Este navegador não oferece leitura nativa por câmera. Use Chrome atualizado ou digite o código.',false);showPointAlert('Leitor de QR indisponível.','Este navegador não oferece leitura nativa por câmera. Use Chrome atualizado ou digite o código.');return}try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});$('video').srcObject=stream;await $('video').play();$('cameraWrap').style.display='block';scanning=true;scanLoop()}catch(e){showResult(null,'Não foi possível abrir a câmera. Verifique a permissão do navegador.',false);showPointAlert('Câmera não disponível.','Verifique a permissão da câmera no navegador e tente novamente.')}}
