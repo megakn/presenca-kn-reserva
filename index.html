@@ -38,6 +38,22 @@ footer{background:linear-gradient(90deg,#052c54,#0b4f86);color:#d6e9fa;padding:1
 .attention-modal .alert-triangle{color:#ffd21f!important;filter:drop-shadow(0 0 10px #ffd21f) drop-shadow(0 0 22px rgba(255,195,0,.65))!important}
 .attention-modal .alert-title{text-shadow:0 0 10px rgba(255,210,31,.72)!important}
 .attention-modal .alert-ok{background:linear-gradient(180deg,#ffd83d,#e7aa00)!important;color:#2b2100!important;border-color:#ffe784!important}
+
+.late-panel{margin-top:16px;border:1px solid #d7e3ef;border-radius:14px;background:#fff;overflow:hidden}
+.late-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 12px;background:#f7fbff;color:#163a5c;border-radius:0;box-shadow:none;text-align:left}
+.late-toggle:hover{transform:none;background:#f1f7fd}
+.late-toggle-left{display:flex;align-items:center;gap:9px;min-width:0}
+.late-arrow{display:inline-block;font-size:13px;transition:transform .2s ease}.late-panel.open .late-arrow{transform:rotate(90deg)}
+.late-title{font-size:13px;font-weight:900}.late-sub{font-size:10px;color:var(--muted);font-weight:600;margin-top:2px}
+.late-count{min-width:28px;height:24px;border-radius:999px;padding:0 8px;display:grid;place-items:center;background:#fff2c7;color:#8c5a00;border:1px solid #ffd66a;font-size:11px;font-weight:900}
+.late-body{display:none;padding:0 10px 10px}.late-panel.open .late-body{display:block}
+.late-table{margin:8px 0 0;border-radius:10px}.late-table th,.late-table td{padding:7px 6px;font-size:10.5px;vertical-align:middle}
+.late-table th{font-size:9.5px}.late-min{font-weight:900;color:#b36b00}
+.late-comm{width:auto;padding:6px 8px;font-size:10.5px;border-radius:8px}
+.late-obs{min-width:150px;padding:7px 8px;font-size:10.5px;border-radius:8px}
+.late-empty{padding:14px;text-align:center;color:var(--muted);font-size:11px}
+@media(max-width:620px){.late-body{overflow-x:auto}.late-table{min-width:700px}}
+
 </style>
 </head>
 <body>
@@ -51,6 +67,18 @@ footer{background:linear-gradient(90deg,#052c54,#0b4f86);color:#d6e9fa;padding:1
 <div id="result" class="result">Aguardando leitura...</div>
 <hr style="border:0;border-top:1px solid var(--line);margin:16px 0"><h2>Buscar colaborador</h2>
 <input id="searchInput" placeholder="Digite parte do nome"><div id="searchResults"></div>
+<div id="latePanel" class="late-panel">
+  <button id="lateToggle" class="late-toggle" type="button">
+    <span class="late-toggle-left">
+      <span class="late-arrow">▶</span>
+      <span><span class="late-title">Atrasos de hoje</span><span class="late-sub">Mais de 20 min após o horário cadastrado</span></span>
+    </span>
+    <span id="lateCount" class="late-count">0</span>
+  </button>
+  <div class="late-body">
+    <div id="lateList" class="late-empty">Nenhum atraso acima de 20 minutos hoje.</div>
+  </div>
+</div>
 </section>
 <section class="card"><div class="neon-panel"><div class="neon-head"><div><h2>Painel de presença</h2><div class="neon-sub">Acompanhamento em tempo real</div></div><div class="live-pill"><span id="netDot" class="dot"></span><span id="netText"></span></div></div><div class="stats"><div class="stat"><b id="todayCount">0</b><span>presenças hoje</span></div><div class="stat"><b id="pendingCount">0</b><span>com pendência</span></div><div class="stat"><b id="rosterCount">0</b><span>colaboradores</span></div></div></div>
 <div class="destinations"><div class="dest"><strong>🏢 Sistema principal</strong><span id="principalText">Verificando...</span></div><div class="dest"><strong>📊 Google Sheets</strong><span id="sheetText">Verificando...</span></div></div>
@@ -193,9 +221,83 @@ function openFolgaConfirm(p,raw,source,mode='folga'){
   setTimeout(()=>$('folgaYesBtn').focus(),30);
 }
 function closeFolgaConfirm(){pendingFolgaMark=null;$('folgaOverlay').classList.remove('show');$('codeInput').focus()}
-async function registerPerson(p,source='manual',trocaFolga=false){let n=nowParts(),regs=loadRegs().map(normalizeOld),pid=String(p.id||p.grootId);let existing=regs.find(r=>r.personId===pid&&r.date===n.date);if(existing){showResult(p,'Presença já registrada hoje às '+existing.time+'.',true);showPointAlert('Ponto já registrado hoje.','Este colaborador já possui uma batida às '+existing.time+'. Nenhum novo ponto foi criado.','attention');return false}if(navigator.onLine){try{let remote=await principalGetExisting({personId:pid,date:n.date});if(remote&&['P','TF'].includes(String(remote.status||'').toUpperCase())){showResult(p,'Ponto já existente no sistema principal.',true);showPointAlert('Ponto já registrado hoje.','O sistema principal já possui registro deste colaborador nesta data. Nenhum novo ponto foi criado.','attention');return false}}catch(e){}}
-let r={eventId:'RES-'+Date.now()+'-'+cryptoRandom(),personId:pid,grootId:String(p.grootId||''),matricula:String(p.matricula||''),ext:String(p.ext||''),nome:p.nome,escala:p.escala||'',date:n.date,time:n.time,createdAt:n.iso,source,deviceId:deviceId(),status:trocaFolga?'TF':'P',trocaFolga:!!trocaFolga,principalSync:'pending',sheetSync:'pending',principalError:'',sheetError:''};regs.unshift(r);saveRegs(regs);showResult(p,(trocaFolga?'Troca de folga registrada':'Presença registrada')+' às '+r.time+'. Enviando ao Principal e ao Sheets...',true);render();beep();syncPending();return true}
-async function markByCode(code,source='manual'){if(markBusy)return;markBusy=true;try{let raw=String(code||'').trim();if(!raw){showResult(null,'Nenhum código informado.',false);showPointAlert('Nenhum QR/código foi lido.','Aproxime novamente o QR do leitor ou digite o Groot ID, matrícula ou EXT.');return}let p=findPerson(raw);if(!p){showResult(null,'Código não encontrado. Confira o Groot ID, matrícula ou EXT.',false);showPointAlert('Colaborador não encontrado.','Verifique se o QR/código está correto ou se o colaborador está cadastrado.');return}let n=nowParts(),regs=loadRegs().map(normalizeOld),pid=String(p.id||p.grootId),existing=regs.find(r=>r.personId===pid&&r.date===n.date);if(existing){showResult(p,'Presença já registrada hoje às '+existing.time+'.',true);showPointAlert('Ponto já registrado hoje.','Este QR/ID já foi usado hoje para '+p.nome+' às '+existing.time+'. Nenhuma segunda batida foi criada.','attention');return}let fs=folgaStatus(p,n.date);if(fs.known&&fs.isFolga){openFolgaConfirm(p,raw,source,'folga');return}if(!fs.known){openFolgaConfirm(p,raw,source,'unknown');return}await registerPerson(p,source,false)}finally{markBusy=false}}
+async function registerPerson(p,source='manual',trocaFolga=false){
+  let n=nowParts(),regs=loadRegs().map(normalizeOld),pid=String(p.id||p.grootId);
+  let existing=regs.find(r=>r.personId===pid&&r.date===n.date);
+
+  if(existing){
+    showResult(p,'Presença já registrada hoje às '+existing.time+'.',true);
+    showPointAlert('Ponto já registrado hoje.','Este colaborador já possui uma batida às '+existing.time+'. Nenhum novo ponto foi criado.','attention');
+    return false;
+  }
+
+  if(navigator.onLine){
+    try{
+      let remote=await principalGetExisting({personId:pid,date:n.date});
+      if(remote&&['P','TF','AT'].includes(String(remote.status||'').toUpperCase())){
+        showResult(p,'Ponto já existente no sistema principal.',true);
+        showPointAlert('Ponto já registrado hoje.','O sistema principal já possui registro deste colaborador nesta data. Nenhum novo ponto foi criado.','attention');
+        return false;
+      }
+    }catch(e){}
+  }
+
+  const div=punchDivergence(p,n.date,n.time);
+  const isLate=isPrincipalLate(p,n.date,n.time);
+
+  let r={
+    eventId:'RES-'+Date.now()+'-'+cryptoRandom(),
+    personId:pid,
+    grootId:String(p.grootId||''),
+    matricula:String(p.matricula||''),
+    ext:String(p.ext||''),
+    nome:p.nome,
+    escala:p.escala||'',
+    horarioCadastro:normalizeShiftTime(p),
+    date:n.date,
+    time:n.time,
+    createdAt:n.iso,
+    source,
+    deviceId:deviceId(),
+    status:trocaFolga?'TF':(isLate?'AT':'P'),
+    trocaFolga:!!trocaFolga,
+    divergenciaHorario:div.has?div.type:'',
+    divergenciaMinutos:div.minutes,
+    atrasoPrincipal:isLate,
+    atrasoMinutos:(isLate&&div.minutes!=null)?div.minutes:0,
+    comunicado:'',
+    observacaoAtraso:'',
+    principalSync:'pending',
+    sheetSync:'pending',
+    principalError:'',
+    sheetError:''
+  };
+
+  regs.unshift(r);
+  saveRegs(regs);
+
+  let msg=(trocaFolga?'Troca de folga registrada':(isLate?'Atraso registrado':'Presença registrada'))+' às '+r.time+'.';
+  if(div.has) msg+=' ATENÇÃO: '+div.message;
+  else msg+=' Horário cadastrado: '+div.shift+'.';
+
+  showResult(p,msg,true);
+  render();
+  beep();
+  syncPending();
+
+  // Divergência de horário nunca impede a presença.
+  // Apenas informa em amarelo depois que o registro já foi salvo.
+  if(div.has){
+    showPointAlert(
+      'Presença registrada com atenção.',
+      p.nome+' foi registrado(a) normalmente. '+div.message,
+      'attention'
+    );
+  }
+
+  return true;
+}
+async function markByCode(code,source='manual'){if(markBusy)return;markBusy=true;try{let raw=String(code||'').trim();if(navigator.onLine){try{await loadRosterFromPrincipal(true)}catch(e){}}if(!raw){showResult(null,'Nenhum código informado.',false);showPointAlert('Nenhum QR/código foi lido.','Aproxime novamente o QR do leitor ou digite o Groot ID, matrícula ou EXT.');return}let p=findPerson(raw);if(!p){showResult(null,'Código não encontrado. Confira o Groot ID, matrícula ou EXT.',false);showPointAlert('Colaborador não encontrado.','Verifique se o QR/código está correto ou se o colaborador está cadastrado.');return}let n=nowParts(),regs=loadRegs().map(normalizeOld),pid=String(p.id||p.grootId),existing=regs.find(r=>r.personId===pid&&r.date===n.date);if(existing){showResult(p,'Presença já registrada hoje às '+existing.time+'.',true);showPointAlert('Ponto já registrado hoje.','Este QR/ID já foi usado hoje para '+p.nome+' às '+existing.time+'. Nenhuma segunda batida foi criada.','attention');return}let fs=folgaStatus(p,n.date);if(fs.known&&fs.isFolga){openFolgaConfirm(p,raw,source,'folga');return}if(!fs.known){openFolgaConfirm(p,raw,source,'unknown');return}await registerPerson(p,source,false)}finally{markBusy=false}}
 async function principalGetExisting(r){
   const url=SUPABASE_URL+'/rest/v1/'+TB_REG+
     '?colaborador_id=eq.'+encodeURIComponent(String(r.personId))+
@@ -213,7 +315,7 @@ async function principalGetExisting(r){
 async function syncPrincipal(r){
   try{
     const existing=await principalGetExisting(r);
-    if(existing && ['P','TF'].includes(String(existing.status||'').toUpperCase())){
+    if(existing && ['P','TF','AT'].includes(String(existing.status||'').toUpperCase())){
       return {ok:true,duplicate:true,existingTime:existing.hora||''};
     }
     const url=SUPABASE_URL+'/rest/v1/'+TB_REG+'?on_conflict=colaborador_id,data';
@@ -228,7 +330,7 @@ async function syncPrincipal(r){
       body:JSON.stringify({
         colaborador_id:String(r.personId),
         data:String(r.date),
-        status:r.trocaFolga?'TF':'P',
+        status:r.trocaFolga?'TF':(r.atrasoPrincipal?'AT':'P'),
         hora:String(r.time)
       })
     });
@@ -463,22 +565,134 @@ function currentMinutes(){
   return d.getHours()*60+d.getMinutes();
 }
 
-function recordBelongsToTodayShift(rec,shift){
-  const recMin=timeToMinutes(rec.time||rec.hora);
-  if(recMin<0)return false;
-  const start=timeToMinutes(shift);
-  if(start<0)return false;
+function operationalDateForPunch(dateIso,timeStr,shift){
+  const punchMin=timeToMinutes(timeStr);
+  const shiftMin=timeToMinutes(shift);
+  if(punchMin<0 || shiftMin<0) return String(dateIso||'');
 
-  // Janela do turno DO DIA. Aceita chegada até 2h antes.
-  // Isso evita que batidas depois da meia-noite do turno de ontem
-  // apareçam como presença do turno noturno de hoje.
-  const windowStart=Math.max(0,start-120);
-  const nowMin=currentMinutes();
+  const base=new Date(String(dateIso)+'T00:00:00');
+  const punch=new Date(base);
+  punch.setMinutes(punchMin);
 
-  // Se o turno de hoje ainda nem chegou à janela de entrada, presença = 0.
-  if(nowMin<windowStart)return false;
+  let bestDate=String(dateIso||'');
+  let bestDiff=Infinity;
 
-  return recMin>=windowStart;
+  [-1,0,1].forEach(dayOffset=>{
+    const scheduled=new Date(base);
+    scheduled.setDate(scheduled.getDate()+dayOffset);
+    scheduled.setMinutes(shiftMin);
+    const diff=Math.abs(punch-scheduled);
+    if(diff<bestDiff){
+      bestDiff=diff;
+      bestDate=scheduled.getFullYear()+'-'+
+        String(scheduled.getMonth()+1).padStart(2,'0')+'-'+
+        String(scheduled.getDate()).padStart(2,'0');
+    }
+  });
+
+  return bestDate;
+}
+
+
+const LATE_GRACE_MINUTES=20;
+const LATE_NOTES_KEY='kn_reserva_atrasos_obs_v1';
+
+function loadLateNotes(){
+  try{return JSON.parse(localStorage.getItem(LATE_NOTES_KEY)||'{}')||{}}catch(e){return {}}
+}
+function saveLateNotes(v){
+  try{localStorage.setItem(LATE_NOTES_KEY,JSON.stringify(v||{}))}catch(e){}
+}
+function lateNoteKey(date,id){return String(date)+'|'+String(id)}
+function getLateNote(date,id){
+  const all=loadLateNotes();
+  return all[lateNoteKey(date,id)]||{communicated:'',obs:''};
+}
+function setLateNote(date,id,patch){
+  const all=loadLateNotes(),k=lateNoteKey(date,id);
+  all[k]=Object.assign({communicated:'',obs:''},all[k]||{},patch||{});
+  saveLateNotes(all);
+}
+function scheduledDiffMinutes(dateIso,timeStr,shift){
+  const punchMin=timeToMinutes(timeStr),shiftMin=timeToMinutes(shift);
+  if(punchMin<0||shiftMin<0)return null;
+  const base=new Date(String(dateIso)+'T00:00:00');
+  const punch=new Date(base); punch.setMinutes(punchMin);
+  let best=null;
+  [-1,0,1].forEach(dayOffset=>{
+    const scheduled=new Date(base);
+    scheduled.setDate(scheduled.getDate()+dayOffset);
+    scheduled.setMinutes(shiftMin);
+    const diffMin=Math.round((punch-scheduled)/60000);
+    if(!best||Math.abs(diffMin)<Math.abs(best.diffMin))best={diffMin,scheduled};
+  });
+  return best?best.diffMin:null;
+}
+function isPrincipalLate(p,dateIso,timeStr){
+  const shift=normalizeShiftTime(p);
+  const diff=scheduledDiffMinutes(dateIso,timeStr,shift);
+  return diff!=null && diff>LATE_GRACE_MINUTES;
+}
+function punchDivergence(p,dateIso,timeStr){
+  const shift=normalizeShiftTime(p);
+  if(!shift){
+    return {
+      has:true,
+      type:'cadastro',
+      shift:'',
+      minutes:null,
+      message:'Horário do colaborador não identificado no cadastro principal.'
+    };
+  }
+
+  const punchMin=timeToMinutes(timeStr);
+  const shiftMin=timeToMinutes(shift);
+  if(punchMin<0 || shiftMin<0){
+    return {
+      has:true,
+      type:'cadastro',
+      shift,
+      minutes:null,
+      message:'Não foi possível comparar a batida com o horário cadastrado.'
+    };
+  }
+
+  const base=new Date(String(dateIso)+'T00:00:00');
+  const punch=new Date(base);
+  punch.setMinutes(punchMin);
+
+  let best=null;
+  [-1,0,1].forEach(dayOffset=>{
+    const scheduled=new Date(base);
+    scheduled.setDate(scheduled.getDate()+dayOffset);
+    scheduled.setMinutes(shiftMin);
+    const diffMin=Math.round((punch-scheduled)/60000);
+    if(!best || Math.abs(diffMin)<Math.abs(best.diffMin)){
+      best={scheduled,diffMin};
+    }
+  });
+
+  if(!best || best.diffMin===0){
+    return {has:false,type:'ok',shift,minutes:0,message:'Batida no horário cadastrado.'};
+  }
+
+  if(best.diffMin<0){
+    return {
+      has:true,
+      type:'adiantada',
+      shift,
+      minutes:Math.abs(best.diffMin),
+      message:'Entrada antecipada em '+Math.abs(best.diffMin)+' min. Horário cadastrado: '+shift+'.'
+    };
+  }
+
+  return {
+    has:true,
+    type:'atraso',
+    shift,
+    minutes:best.diffMin,
+    message:'Atraso de '+best.diffMin+' min. Horário cadastrado: '+shift+'.'
+  };
 }
 
 function mergeTodayRecords(localRegs,remoteRows,today){
@@ -487,13 +701,13 @@ function mergeTodayRecords(localRegs,remoteRows,today){
   (localRegs||[]).filter(r=>r.date===today).forEach(r=>{
     const id=String(r.personId||r.grootId||'');
     if(!id)return;
-    byPerson.set(id,{personId:id,time:String(r.time||''),source:'local'});
+    byPerson.set(id,{personId:id,date:String(r.date||today),time:String(r.time||''),status:String(r.status||'P'),source:'local'});
   });
 
   (remoteRows||[]).forEach(r=>{
     const id=String(r.colaborador_id||'');
     if(!id)return;
-    const candidate={personId:id,time:String(r.hora||''),source:'principal'};
+    const candidate={personId:id,date:String(r.data||today),time:String(r.hora||''),status:String(r.status||'P'),source:'principal'};
     const old=byPerson.get(id);
     // Prefere o registro com horário disponível/mais recente.
     if(!old || timeToMinutes(candidate.time)>=timeToMinutes(old.time)) byPerson.set(id,candidate);
@@ -523,7 +737,14 @@ function calculateTodayShiftRows(recordsByPerson){
     people.forEach(p=>{
       const id=String(p.id||p.grootId);
       const rec=recordsByPerson.get(id);
-      if(rec && recordBelongsToTodayShift(rec,s.key)) present++;
+      if(!rec) return;
+
+      // O turno é SEMPRE o horário cadastrado da pessoa no banco.
+      // A hora real da batida nunca exclui a presença por atraso/antecipação.
+      // Ela serve somente para descobrir a data operacional correta,
+      // especialmente nos turnos noturnos que atravessam meia-noite.
+      const opDate=operationalDateForPunch(rec.date||today,rec.time||'',s.key);
+      if(opDate===today) present++;
     });
 
     return {
@@ -542,6 +763,94 @@ function calculateTodayShiftRows(recordsByPerson){
 
 function drawShiftRows(rows){
   $('shiftBody').innerHTML=rows.map(r=>`<tr><td><b>${r.label}</b></td><td class="qty">${r.qty}</td><td class="expected">${r.expected}</td><td class="present">${r.present}</td><td class="pendingShift">${r.pending}</td></tr>`).join('');
+}
+
+
+function renderLatePanel(dayData){
+  if(!$('lateList')||!dayData)return;
+
+  // Não redesenha a tabela enquanto a pessoa estiver escrevendo uma
+  // justificativa ou alterando "Comunicado?". A atualização automática
+  // continua funcionando no restante do painel.
+  const focused=document.activeElement;
+  if(focused && $('latePanel') && $('latePanel').contains(focused) &&
+     (focused.classList.contains('late-obs') || focused.classList.contains('late-comm'))){
+    return;
+  }
+
+  const today=dayData.today;
+  const rows=[];
+
+  ROSTER.forEach(p=>{
+    const id=String(p.id||p.grootId);
+    const rec=dayData.recordsByPerson.get(id);
+    if(!rec)return;
+
+    const shift=normalizeShiftTime(p);
+    if(!shift)return;
+
+    const opDate=operationalDateForPunch(rec.date||today,rec.time||'',shift);
+    if(opDate!==today)return;
+
+    const diff=scheduledDiffMinutes(rec.date||today,rec.time||'',shift);
+    if(diff==null||diff<=LATE_GRACE_MINUTES)return;
+
+    const note=getLateNote(today,id);
+    rows.push({
+      id,
+      nome:p.nome||id,
+      shift,
+      time:String(rec.time||''),
+      diff,
+      communicated:String(note.communicated||''),
+      obs:String(note.obs||'')
+    });
+  });
+
+  rows.sort((a,b)=>b.diff-a.diff || a.nome.localeCompare(b.nome,'pt-BR'));
+  $('lateCount').textContent=rows.length;
+
+  if(!rows.length){
+    $('lateList').className='late-empty';
+    $('lateList').innerHTML='Nenhum atraso acima de 20 minutos hoje.';
+    return;
+  }
+
+  $('lateList').className='';
+  $('lateList').innerHTML=`<table class="late-table"><thead><tr>
+    <th>Nome</th><th>Turno</th><th>Batida</th><th>Atraso</th><th>Comunicado?</th><th>Obs.</th>
+  </tr></thead><tbody>${rows.map(r=>`<tr>
+    <td>${esc(r.nome)}</td>
+    <td>${esc(r.shift)}</td>
+    <td>${esc(r.time)}</td>
+    <td class="late-min">${r.diff} min</td>
+    <td>
+      <select class="late-comm" data-late-id="${esc(r.id)}">
+        <option value="" ${r.communicated===''?'selected':''}>—</option>
+        <option value="sim" ${r.communicated==='sim'?'selected':''}>Sim</option>
+        <option value="nao" ${r.communicated==='nao'?'selected':''}>Não</option>
+      </select>
+    </td>
+    <td><input class="late-obs" data-late-obs-id="${esc(r.id)}" value="${esc(r.obs)}" placeholder="Ex.: avisou o líder"></td>
+  </tr>`).join('')}</tbody></table>`;
+
+  $('lateList').querySelectorAll('.late-comm').forEach(el=>{
+    el.addEventListener('change',()=>{
+      setLateNote(today,el.dataset.lateId,{communicated:el.value});
+    });
+  });
+  $('lateList').querySelectorAll('.late-obs').forEach(el=>{
+    const saveObs=()=>{
+      // Durante a digitação preserva exatamente o texto digitado.
+      setLateNote(today,el.dataset.lateObsId,{obs:el.value});
+    };
+    el.addEventListener('input',saveObs);
+    el.addEventListener('change',saveObs);
+    el.addEventListener('blur',()=>{
+      el.value=el.value.trim();
+      setLateNote(today,el.dataset.lateObsId,{obs:el.value});
+    });
+  });
 }
 
 async function getTodayOperationalData(){
@@ -590,6 +899,7 @@ async function render(){
   // Usa a mesma regra da tabela por horários para os cards:
   // somente presença pertencente aos turnos DO DIA.
   const dayData=await getTodayOperationalData();
+  renderLatePanel(dayData);
   const presentCount=dayData.rows.reduce((n,r)=>n+r.present,0);
   const expectedToday=dayData.rows.reduce((n,r)=>n+r.expected,0);
   const pendingPeople=Math.max(0,expectedToday-presentCount);
@@ -603,8 +913,49 @@ async function render(){
   $('principalText').textContent=pp?pp+' registro(s) pendente(s) para o Principal':'Sincronizado com o Principal';
   $('sheetText').textContent=sp?(sp+' pendente(s) de envio'+(ss?' • '+ss+' enviado(s), aguardando confirmação':'')):(ss?ss+' enviado(s), aguardando confirmação':'Sincronizado e confirmado no Google Sheets');
 
-  $('logBody').innerHTML=todayRegs.slice(0,300).map(rowHtml).join('')||'<tr><td colspan="5" class="empty-note">Nenhuma batida registrada hoje.</td></tr>';
-  if($('todayChip'))$('todayChip').textContent=todayRegs.length+' registro'+(todayRegs.length===1?'':'s')+' hoje';
+  // Batidas de hoje: junta Reserva + Principal e elimina duplicidade por colaborador.
+  const todayMerged=[];
+  const seenToday=new Set();
+
+  todayRegs.forEach(r=>{
+    const id=String(r.personId||r.grootId||'');
+    if(!id || seenToday.has(id)) return;
+    seenToday.add(id);
+    todayMerged.push(r);
+  });
+
+  (dayData.remote||[]).forEach(rr=>{
+    const id=String(rr.colaborador_id||'');
+    if(!id || seenToday.has(id)) return;
+    seenToday.add(id);
+
+    const p=ROSTER.find(x=>String(x.id||x.grootId)===id);
+    todayMerged.push({
+      eventId:'PRINCIPAL-'+id+'-'+today,
+      personId:id,
+      grootId:p?String(p.grootId||p.id):id,
+      matricula:p?String(p.matricula||''):'',
+      ext:p?String(p.ext||''):'',
+      nome:p?p.nome:'Colaborador ID '+id,
+      escala:p?String(p.escala||''):'',
+      date:String(rr.data||today),
+      time:String(rr.hora||'--:--:--'),
+      status:String(rr.status||'P'),
+      principalSync:'synced',
+      sheetSync:'unknown',
+      principalError:'',
+      sheetError:'Registro consultado no Principal'
+    });
+  });
+
+  todayMerged.sort((a,b)=>String(b.time||'').localeCompare(String(a.time||'')));
+
+  $('logBody').innerHTML=todayMerged.slice(0,300).map(rowHtml).join('')||
+    '<tr><td colspan="5" class="empty-note">Nenhuma batida registrada hoje.</td></tr>';
+
+  if($('todayChip')){
+    $('todayChip').textContent=todayMerged.length+' registro'+(todayMerged.length===1?'':'s')+' hoje';
+  }
 
   renderHistory();
   renderShiftTable(true,dayData);
@@ -615,6 +966,6 @@ function stopCamera(){scanning=false;if(stream)stream.getTracks().forEach(t=>t.s
 async function scanLoop(){if(!scanning)return;try{let det=new BarcodeDetector({formats:['qr_code','code_128','code_39','ean_13','ean_8']});let codes=await det.detect($('video'));if(codes&&codes[0]){let value=codes[0].rawValue;stopCamera();$('codeInput').value=value;markByCode(value,'camera');return}}catch(e){}requestAnimationFrame(scanLoop)}
 $('markBtn').onclick=()=>{markByCode($('codeInput').value);$('codeInput').select()};$('codeInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('markBtn').click()});$('cameraBtn').onclick=startCamera;$('stopCameraBtn').onclick=stopCamera;$('retryBtn').onclick=async()=>{const btn=$('retryBtn'),old=btn.textContent;btn.disabled=true;btn.textContent='Sincronizando...';try{await loadRosterFromPrincipal(true);await syncPending();await render();await renderShiftTable(true)}finally{btn.disabled=false;btn.textContent=old}};$('exportBtn').onclick=exportCsv;
 $('searchInput').addEventListener('input',e=>{let q=norm(e.target.value);if(q.length<2){$('searchResults').innerHTML='';return}let found=ROSTER.filter(p=>norm(p.nome).includes(q)).slice(0,8);$('searchResults').innerHTML=found.map(p=>`<div style="padding:8px 0;border-bottom:1px solid #edf1f5"><b>${esc(p.nome)}</b><br>Groot ID: ${esc(p.grootId||p.id)} <button class="success" style="padding:5px 8px;margin-left:6px" onclick="document.getElementById('codeInput').value='${esc(p.grootId||p.id)}';document.getElementById('markBtn').click()">Marcar</button></div>`).join('')||'Nenhum nome encontrado.'});
-$('historyDate').value=nowParts().date;$('historyBtn').onclick=renderHistory;$('historyDate').addEventListener('change',renderHistory);$('historySearch').addEventListener('input',renderHistory);$('alertOkBtn').onclick=closePointAlert;$('alertOverlay').addEventListener('click',e=>{if(e.target===$('alertOverlay'))return});$('folgaNoBtn').onclick=()=>{let x=pendingFolgaMark;showResult(x&&x.p,x&&x.mode==='unknown'?'Registro cancelado: calendário de folga não configurado para esta data.':'Registro cancelado: colaborador está de folga hoje.',false);closeFolgaConfirm()};$('folgaYesBtn').onclick=async()=>{let x=pendingFolgaMark;if(!x)return;$('folgaOverlay').classList.remove('show');pendingFolgaMark=null;await registerPerson(x.p,x.source,x.mode==='folga');$('codeInput').value='';$('codeInput').focus()};updateClock();setInterval(updateClock,1000);
+$('lateToggle').onclick=()=>{$('latePanel').classList.toggle('open')};$('historyDate').value=nowParts().date;$('historyBtn').onclick=renderHistory;$('historyDate').addEventListener('change',renderHistory);$('historySearch').addEventListener('input',renderHistory);$('alertOkBtn').onclick=closePointAlert;$('alertOverlay').addEventListener('click',e=>{if(e.target===$('alertOverlay'))return});$('folgaNoBtn').onclick=()=>{let x=pendingFolgaMark;showResult(x&&x.p,x&&x.mode==='unknown'?'Registro cancelado: calendário de folga não configurado para esta data.':'Registro cancelado: colaborador está de folga hoje.',false);closeFolgaConfirm()};$('folgaYesBtn').onclick=async()=>{let x=pendingFolgaMark;if(!x)return;$('folgaOverlay').classList.remove('show');pendingFolgaMark=null;await registerPerson(x.p,x.source,x.mode==='folga');$('codeInput').value='';$('codeInput').focus()};updateClock();setInterval(updateClock,1000);
 window.addEventListener('online',async()=>{await loadRosterFromPrincipal(true);await render();syncPending()});window.addEventListener('offline',render);setInterval(syncPending,30000);setInterval(async()=>{if(navigator.onLine){await loadRosterFromPrincipal(true);await render()}},5000);(async()=>{await loadRosterFromPrincipal(true);await render();setTimeout(syncPending,600)})();
 </script></body></html>
