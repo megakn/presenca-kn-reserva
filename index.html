@@ -18,7 +18,7 @@ input{width:100%;padding:15px;border:1px solid #cbd8e6;border-radius:12px;font-s
 .destinations{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:9px 0 7px}.dest{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fbfcfe;box-shadow:0 3px 9px rgba(20,55,90,.035);min-height:56px}.dest strong{display:block;margin-bottom:3px;font-size:12px}.dest span{font-size:10.5px;line-height:1.25;color:var(--muted)}
 .compact-actions{display:flex;gap:7px;flex-wrap:wrap;margin:6px 0 10px}.compact-actions button{padding:8px 11px;border-radius:9px;font-size:11.5px}
 .shift-box{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;margin-top:8px}.shift-title{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:#f6f9fc;border-bottom:1px solid var(--line)}.shift-title strong{font-size:12px;color:#183b59}.shift-title span{font-size:10px;color:var(--muted)}
-.shift-table{width:100%;margin:0;border:0;border-radius:0;border-collapse:collapse}.shift-table th,.shift-table td{padding:6px 8px;font-size:11px;text-align:center;border-bottom:1px solid #e7eef5}.shift-table th{background:#fbfdff;color:#31506c;font-size:10px;text-transform:uppercase;letter-spacing:.02em}.shift-table th:first-child,.shift-table td:first-child{text-align:left}.shift-table tbody tr:last-child td{border-bottom:0}.shift-table .qty{font-weight:800;color:#173b5b}.shift-table .present{font-weight:900;color:#0d7d52}.shift-table .pendingShift{font-weight:900;color:#b36b00}
+.shift-table{width:100%;margin:0;border:0;border-radius:0;border-collapse:collapse}.shift-table th,.shift-table td{padding:6px 8px;font-size:11px;text-align:center;border-bottom:1px solid #e7eef5}.shift-table th{background:#fbfdff;color:#31506c;font-size:10px;text-transform:uppercase;letter-spacing:.02em}.shift-table th:first-child,.shift-table td:first-child{text-align:left}.shift-table tbody tr:last-child td{border-bottom:0}.shift-table .qty{font-weight:800;color:#173b5b}.shift-table .expected{font-weight:900;color:#0a5f9f}.shift-table .present{font-weight:900;color:#0d7d52}.shift-table .pendingShift{font-weight:900;color:#b36b00}
 .history-wrap{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}.history-card{padding:18px}.history-toolbar{display:grid;grid-template-columns:180px 1fr auto;gap:10px;align-items:center;margin:8px 0 12px}.count-chip{margin-left:auto;background:#e9f4ff;color:#0a5f9f;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:800}.empty-note{padding:18px;text-align:center;color:var(--muted)}
 table{width:100%;border-collapse:separate;border-spacing:0;border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-top:12px;background:#fff}th,td{text-align:left;padding:10px 9px;border-bottom:1px solid var(--line);font-size:12px}th{background:#f4f8fc;color:#24425f}tr:last-child td{border-bottom:0}tbody tr:hover{background:#f9fcff}.syncok{color:#12805c;font-weight:800}.syncpend{color:#b86a00;font-weight:800}.small{font-size:12px;color:var(--muted)}
 #cameraWrap{display:none;margin-top:12px}video{width:100%;max-height:320px;background:#000;border-radius:14px}#searchResults{font-size:13px;color:var(--muted)}
@@ -58,7 +58,7 @@ footer{background:linear-gradient(90deg,#052c54,#0b4f86);color:#d6e9fa;padding:1
 <div class="shift-box">
   <div class="shift-title"><strong>Colaboradores por horário</strong><span id="shiftSource">Atualizando...</span></div>
   <table class="shift-table">
-    <thead><tr><th>Turno</th><th>Quantidade</th><th>Presença</th><th>Pendentes</th></tr></thead>
+    <thead><tr><th>Turno</th><th>Quantidade</th><th>Prevista hoje</th><th>Presença</th><th>Pendentes</th></tr></thead>
     <tbody id="shiftBody"></tbody>
   </table>
 </div>
@@ -503,18 +503,37 @@ function mergeTodayRecords(localRegs,remoteRows,today){
 }
 
 function calculateTodayShiftRows(recordsByPerson){
+  const today=nowParts().date;
+
   const rows=SHIFT_TIMES.map(s=>{
     const people=ROSTER.filter(p=>normalizeShiftTime(p)===s.key);
     const qty=people.length;
-    let present=0;
 
+    // Quantidade prevista hoje:
+    // exclui somente quem o calendário informa que está de folga hoje.
+    // Se não houver calendário conhecido para a escala/data, mantém a pessoa
+    // na previsão para não reduzir o efetivo com base em informação incerta.
+    const expectedPeople=people.filter(p=>{
+      const fs=folgaStatus(p,today);
+      return !(fs.known && fs.isFolga);
+    });
+    const expected=expectedPeople.length;
+
+    let present=0;
     people.forEach(p=>{
       const id=String(p.id||p.grootId);
       const rec=recordsByPerson.get(id);
       if(rec && recordBelongsToTodayShift(rec,s.key)) present++;
     });
 
-    return {label:s.label,key:s.key,qty,present,pending:Math.max(0,qty-present)};
+    return {
+      label:s.label,
+      key:s.key,
+      qty,
+      expected,
+      present,
+      pending:Math.max(0,expected-present)
+    };
   });
 
   lastTodayPresenceCount=rows.reduce((n,r)=>n+r.present,0);
@@ -522,7 +541,7 @@ function calculateTodayShiftRows(recordsByPerson){
 }
 
 function drawShiftRows(rows){
-  $('shiftBody').innerHTML=rows.map(r=>`<tr><td><b>${r.label}</b></td><td class="qty">${r.qty}</td><td class="present">${r.present}</td><td class="pendingShift">${r.pending}</td></tr>`).join('');
+  $('shiftBody').innerHTML=rows.map(r=>`<tr><td><b>${r.label}</b></td><td class="qty">${r.qty}</td><td class="expected">${r.expected}</td><td class="present">${r.present}</td><td class="pendingShift">${r.pending}</td></tr>`).join('');
 }
 
 async function getTodayOperationalData(){
@@ -572,7 +591,8 @@ async function render(){
   // somente presença pertencente aos turnos DO DIA.
   const dayData=await getTodayOperationalData();
   const presentCount=dayData.rows.reduce((n,r)=>n+r.present,0);
-  const pendingPeople=Math.max(0,ROSTER.length-presentCount);
+  const expectedToday=dayData.rows.reduce((n,r)=>n+r.expected,0);
+  const pendingPeople=Math.max(0,expectedToday-presentCount);
 
   $('todayCount').textContent=presentCount;
   $('pendingCount').textContent=pendingPeople;
