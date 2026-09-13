@@ -119,10 +119,6 @@ const TB_REG='kn_presenca_registros';
 const SHEETS_WEBAPP_URL='https://script.google.com/macros/s/AKfycbzQefSb5rmbFCfzKYFqg7UUcXRErJ6eEJCh00NYmB22aGfTjyGTpZNS1Bk3x051Rb3Z/exec';
 
 let stream=null, scanning=false, syncing=false; const $=id=>document.getElementById(id);
-// Corrige "painel não zera à meia-noite": guarda a última data renderizada e força
-// um render() completo assim que o relógio local detectar a virada do dia,
-// independente do intervalo periódico (que antes só rodava quando online).
-let lastKnownRenderDate=nowParts().date;
 const FOLGA_ROWS = [["SVC - A","01,02,07,13,19,20,24,25,29,30","05,11,17,18,22,23",""],["SVC - B","03,04,08,09,14,20,26,27","01,02,06,07,12,18,24,25",""],["SVC - C","05,06,10,11,15,16,21,27","03,04,08,09,13,14,19,25",""],["SVC - D","06,12,13,17,18,22,23,28","04,10,11,15,16,20,21",""],["SVC - B1 - 05H / 09H / 10H / 14H48","05,06,11,14,17,22,23,27","03,04,09,12,15,20,21,25,31","01,06,09,12,17,18,22"],["SVC - B2 - 05H / 09H / 10H / 14H48","01,02,06,12,13,18,21,24,29,30","04,10,11,16,19,22,27,28","01,07,08,13,16,19"],["SVC - B3 - 05H / 09H / 10H / 14H48","03,08,09,13,19,20,25,28","01,06,07,11,17,18,23,26,29","03,04,08,14,15,20"],["SVC - B4 - 05H / 09H / 10H / 14H48","04,07,10,15,16,20,26,27","02,05,08,13,14,18,24,25,30","02,05,10,11,15,21,22"],["SVC - C1 - 05H / 09H / 10H / 14H48","05,06,11,16,17,21,22,28","03,04,09,14,15,19,20,26,31","01,06,11,12,16,17"],["SVC - C2 - 05H / 09H / 10H / 14H48","02,03,07,08,14,19,20,25,30","01,05,06,12,17,18,23,28,29","02,03,09,14,15,20"],["SVC - C3 - 05H / 09H / 10H / 14H48","01,07,12,13,18,23,24,28,29","05,10,11,16,21,22,26,27","02,07,08,13,18,19"],["SVC - C4 - 05H / 09H / 10H / 14H48","04,09,10,14,15,21,26,27","02,07,08,12,13,19,24,25,30","04,05,09,10,16,21,22"],["SVC - C1 - 06H / 10H / 11H / 15H48","02,03,07,08,14,19,20,25,30","01,05,06,12,17,18,23,28,29","02,03,09,14,15,20"],["SVC - C2 - 06H / 10H / 11H / 15H48","05,06,11,16,17,21,22,28","03,04,09,14,15,19,20,26,31","01,06,11,12,16,17"],["SVC - C3 - 06H / 09H / 10H / 15H48","04,09,10,14,15,21,26,27","02,07,08,12,13,19,24,25,30","04,05,09,10,16,21,22"],["SVC - C4 - 06H / 10H / 11H / 15H48","01,07,12,13,18,23,24,28,29","05,10,11,16,21,22,26,27","02,07,08,13,18,19"],["SVC - G1 - 08H / 12H / 13H / 17H48","06,07,13,14,20,21,27,28","04,05,11,12,18,19,25,26","01,02,08,09,15,16,22"],["SVC - G2 - 08H / 12H / 13H / 17H48","05,06,12,13,19,20,26,27","03,04,10,11,17,18,24,25,31","01,07,08,14,15,21,22"],["SVC - G1 - 13H / 17H / 18H / 22H48","03,06,12,13,14,20,23,27","01,04,10,11,12,18,21,25,29","01,07,08,09,15,18,22"],["SVC - G2 - 13H / 17H / 18H / 22H48","02,06,10,13,19,20,21,27,30","04,08,11,17,18,19,25,28","01,05,08,14,15,16,22"],["SVC - G3 - 13H / 17H / 18H / 22H48","06,09,13,17,20,26,27,28","04,07,11,15,18,24,25,26","01,04,08,12,15,21,22"],["SVC - G4 - 13H / 17H / 18H / 22H48","05,06,07,13,16,20,24,27","03,04,05,11,14,18,22,25,31","01,02,08,11,15,19,22"],["SVC - A1 - 14H / 18H / 19H / 23H48","01,07,08,14,15,21,22,27,28,29","05,06,12,13,19,20,25,26,27","02,03,09,10,16,17,22"],["SVC - A2 - 14H / 18H / 19H / 23H48","01,06,07,08,14,15,21,22,28,29","04,05,06,12,13,19,20,26,27","01,02,03,09,10,16,17"],["SVC - A3 - 14H / 18H / 19H / 23H48","01,07,08,13,14,15,21,22,28,29","05,06,11,12,13,19,20,26,27","02,03,08,09,10,16,17"],["SVC - A4 - 14H / 18H / 19H / 23H48","01,07,08,14,15,20,21,22,28,29","05,06,12,13,18,19,20,26,27","02,03,09,10,15,16,17"],["SVC - G1 - 23H / 03H / 04H / 08H48","01,02,08,12,13,18,21,24,29,30","06,10,11,16,19,22,27,28","03,07,08,13,16,19"],["SVC - G2 - 23H / 03H / 04H / 08H48","04,07,10,15,16,22,26,27","02,05,08,13,14,20,24,25,30","02,05,10,11,17,21,22"],["SVC - G3 - 23H / 03H / 04H / 08H48","03,08,09,15,19,20,25,28","01,06,07,13,17,18,23,26,29","03,04,10,14,15,20"],["SVC - G4 - 23H / 03H / 04H / 08H48","01,05,06,11,14,17,22,23,29","03,04,09,12,15,20,21,27,31","01,06,09,12,17,18"]];
 let pendingFolgaMark=null, markBusy=false;
 
@@ -193,19 +189,17 @@ function beep(){try{let a=new (window.AudioContext||window.webkitAudioContext)()
 function alertBeep(){try{let a=new (window.AudioContext||window.webkitAudioContext)();[0,260,520].forEach(ms=>{let o=a.createOscillator(),g=a.createGain();o.type='square';o.frequency.value=220;o.connect(g);g.connect(a.destination);let t=a.currentTime+ms/1000;g.gain.setValueAtTime(.12,t);g.gain.exponentialRampToValueAtTime(.001,t+.18);o.start(t);o.stop(t+.18)})}catch(e){}}
 let alertTimer=null;function showPointAlert(reason,detail,type='error'){let attention=type==='attention';if($('alertModal'))$('alertModal').classList.toggle('attention-modal',attention);$('alertTitle').textContent=attention?'ATENÇÃO':'PONTO NÃO REGISTRADO!';$('alertReason').textContent=reason||'Não foi possível registrar.';$('alertDetail').textContent=detail||'Verifique o código e tente novamente.';$('alertOverlay').classList.add('show');alertBeep();clearInterval(alertTimer);alertTimer=setInterval(alertBeep,1600);setTimeout(()=>$('alertOkBtn').focus(),40)}
 function closePointAlert(){clearInterval(alertTimer);alertTimer=null;$('alertOverlay').classList.remove('show');if($('alertModal'))$('alertModal').classList.remove('attention-modal');$('codeInput').focus()}
+let activeCalendarDate=nowParts().date;
 function updateClock(){
-  let d=new Date();
+  let d=new Date(),calendarDate=d.toLocaleDateString('sv-SE');
   $('liveDate').textContent=d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
   $('liveTime').textContent=d.toLocaleTimeString('pt-BR',{hour12:false});
-
-  // Roda a cada 1s (mais rápido que o polling de 5s), então é aqui que a
-  // virada do dia é detectada primeiro. Assim que "hoje" muda, refaz o
-  // render inteiro na hora — sem isso o painel podia continuar mostrando
-  // os números/registros de ontem até alguém interagir com o app.
-  const currentDate=d.toLocaleDateString('sv-SE');
-  if(currentDate!==lastKnownRenderDate){
-    lastKnownRenderDate=currentDate;
-    render();
+  // Ao virar 00:00, força a troca imediata do painel para o novo dia,
+  // inclusive se o aparelho estiver sem internet.
+  if(calendarDate!==activeCalendarDate){
+    activeCalendarDate=calendarDate;
+    if($('historyDate')) $('historyDate').value=calendarDate;
+    Promise.resolve().then(()=>render()).catch(()=>{});
   }
 }
 function showResult(p,msg,ok){let el=$('result');el.className='result'+(ok?' ok':'');el.innerHTML=p?`<div class="name">${esc(p.nome)}</div><div class="meta">${esc(msg)}<br>Groot ID: ${esc(p.grootId||p.id)}${p.escala?'<br>'+esc(p.escala):''}</div>`:`<div class="name" style="font-size:18px">${esc(msg)}</div>`}
@@ -507,12 +501,21 @@ async function renderHistory(){
   if(!$('historyBody'))return;
   let regs=loadRegs().map(normalizeOld),today=nowParts().date;
   let date=$('historyDate').value||today,q=norm($('historySearch').value||'');
-  let merged=regs.filter(r=>r.date===date);
+  // Quando o Histórico está na data de HOJE, aplica exatamente a mesma regra
+  // da área "Batidas de hoje". Isso impede que registros operacionais da
+  // noite anterior ou horários futuros reapareçam aqui depois da meia-noite.
+  let merged=regs.filter(r=>{
+    if(String(r.date||'')!==String(date)) return false;
+    return String(date)===String(today) ? isValidCalendarTodayLocal(r,today) : true;
+  });
   let sourceNote='local';
 
   if(navigator.onLine){
     try{
-      const remote=await principalHistory(date);
+      let remote=await principalHistory(date);
+      if(String(date)===String(today)){
+        remote=remote.filter(r=>isValidCalendarTodayRemote(r,today));
+      }
       const byKey=new Map(merged.map(r=>[String(r.personId)+'|'+r.date,r]));
       for(const rr of remote){
         const pid=String(rr.colaborador_id||'');
@@ -720,16 +723,78 @@ function punchDivergence(p,dateIso,timeStr){
   };
 }
 
+function isPreviousDayNightCarryover(row,today){
+  // O Principal pode manter a escala noturna (22:30/23:00) na data operacional
+  // do dia seguinte. Para o painel "hoje" usamos DATA DE CALENDÁRIO: depois da
+  // meia-noite, a presença da noite anterior não pode continuar aparecendo.
+  const id=String((row&&row.colaborador_id)||'');
+  const p=ROSTER.find(x=>String(x.id||x.grootId)===id);
+  if(!p) return false;
+  const shiftMin=timeToMinutes(normalizeShiftTime(p));
+  if(shiftMin < 22*60) return false;
+  if(String((row&&row.data)||'')!==String(today)) return false;
+
+  const now=new Date();
+  const nowMin=now.getHours()*60+now.getMinutes();
+  // A limpeza é necessária na faixa pós-meia-noite. Depois do meio-dia não há
+  // risco de confundir a virada com a escala da noite anterior.
+  if(nowMin>=12*60) return false;
+
+  const punchMin=timeToMinutes((row&&row.hora)||'');
+  // Se há hora e ela é da noite, é claramente a batida do calendário anterior.
+  // Se o Principal não devolveu a hora, também não usamos essa linha no "hoje"
+  // durante a madrugada, evitando carregar o dia anterior para o novo dia.
+  return punchMin<0 || punchMin>=18*60;
+}
+
+function isValidCalendarTodayRemote(row,today){
+  // O painel "hoje" usa a DATA REAL do calendário.
+  if(String((row&&row.data)||'')!==String(today)) return false;
+
+  const punchMin=timeToMinutes((row&&row.hora)||'');
+  if(punchMin<0) return false;
+
+  const nowMin=currentMinutes();
+  if(punchMin>nowMin+2) return false; // não aceita horário futuro como presença de hoje
+
+  // Regra importante da virada do dia:
+  // colaboradores cuja jornada começa 22:30/23:00 e batem após 00:00 ainda
+  // pertencem ao turno iniciado no DIA ANTERIOR. Esses registros não podem
+  // permanecer no painel "hoje" depois da meia-noite.
+  const id=String((row&&row.colaborador_id)||'');
+  const p=ROSTER.find(x=>String(x.id||x.grootId)===id);
+  if(p){
+    const shiftMin=timeToMinutes(normalizeShiftTime(p));
+    if(shiftMin>=18*60 && punchMin<12*60) return false;
+  }
+
+  return true;
+}
+
+function isValidCalendarTodayLocal(rec,today){
+  if(String((rec&&rec.date)||'')!==String(today)) return false;
+  const punchMin=timeToMinutes((rec&&rec.time)||'');
+  if(punchMin<0) return false;
+  const id=String((rec&&rec.personId)||(rec&&rec.grootId)||'');
+  const p=ROSTER.find(x=>String(x.id||x.grootId)===id);
+  if(p){
+    const shiftMin=timeToMinutes(normalizeShiftTime(p));
+    if(shiftMin>=18*60 && punchMin<12*60) return false;
+  }
+  return punchMin<=currentMinutes()+2;
+}
+
 function mergeTodayRecords(localRegs,remoteRows,today){
   const byPerson=new Map();
 
-  (localRegs||[]).filter(r=>r.date===today).forEach(r=>{
+  (localRegs||[]).filter(r=>isValidCalendarTodayLocal(r,today)).forEach(r=>{
     const id=String(r.personId||r.grootId||'');
     if(!id)return;
     byPerson.set(id,{personId:id,date:String(r.date||today),time:String(r.time||''),status:String(r.status||'P'),source:'local'});
   });
 
   (remoteRows||[]).forEach(r=>{
+    if(!isValidCalendarTodayRemote(r,today)) return;
     const id=String(r.colaborador_id||'');
     if(!id)return;
     const candidate={personId:id,date:String(r.data||today),time:String(r.hora||''),status:String(r.status||'P'),source:'principal'};
@@ -764,12 +829,11 @@ function calculateTodayShiftRows(recordsByPerson){
       const rec=recordsByPerson.get(id);
       if(!rec) return;
 
-      // O turno é SEMPRE o horário cadastrado da pessoa no banco.
-      // A hora real da batida nunca exclui a presença por atraso/antecipação.
-      // Ela serve somente para descobrir a data operacional correta,
-      // especialmente nos turnos noturnos que atravessam meia-noite.
-      const opDate=operationalDateForPunch(rec.date||today,rec.time||'',s.key);
-      if(opDate===today) present++;
+      // Para o card "Presenças hoje" vale exclusivamente a DATA DE CALENDÁRIO
+      // em que a batida aconteceu. Não carregamos mais presença do turno anterior
+      // para o novo dia após 00:00. Atraso/adiantamento continua sendo informado
+      // separadamente e nunca impede uma batida real do dia de contar presença.
+      if(String(rec.date||'')===String(today)) present++;
     });
 
     return {
@@ -778,7 +842,9 @@ function calculateTodayShiftRows(recordsByPerson){
       qty,
       expected,
       present,
-      pending:Math.max(0,expected-present)
+      // Pendência só nasce quando o turno de HOJE já começou. Antes do horário
+      // do turno, o painel fica zerado em vez de carregar pendências do dia anterior.
+      pending:(timeToMinutes(s.key)<=currentMinutes())?Math.max(0,expected-present):0
     };
   });
 
@@ -886,7 +952,7 @@ async function getTodayOperationalData(){
 
   if(navigator.onLine){
     try{
-      remote=await principalHistory(today);
+      remote=(await principalHistory(today)).filter(r=>isValidCalendarTodayRemote(r,today));
       source='Principal + local';
     }catch(e){
       source='local';
@@ -915,7 +981,7 @@ async function renderShiftTable(force=false,data=null){
 }
 
 async function render(){
-  let regs=loadRegs().map(normalizeOld),today=nowParts().date,todayRegs=regs.filter(r=>r.date===today);
+  let regs=loadRegs().map(normalizeOld),today=nowParts().date,todayRegs=regs.filter(r=>isValidCalendarTodayLocal(r,today));
 
   $('rosterCount').textContent=ROSTER.length;
   $('netDot').className='dot '+(navigator.onLine?'online':'offline');
@@ -926,8 +992,7 @@ async function render(){
   const dayData=await getTodayOperationalData();
   renderLatePanel(dayData);
   const presentCount=dayData.rows.reduce((n,r)=>n+r.present,0);
-  const expectedToday=dayData.rows.reduce((n,r)=>n+r.expected,0);
-  const pendingPeople=Math.max(0,expectedToday-presentCount);
+  const pendingPeople=dayData.rows.reduce((n,r)=>n+r.pending,0);
 
   $('todayCount').textContent=presentCount;
   $('pendingCount').textContent=pendingPeople;
@@ -992,16 +1057,5 @@ async function scanLoop(){if(!scanning)return;try{let det=new BarcodeDetector({f
 $('markBtn').onclick=()=>{markByCode($('codeInput').value);$('codeInput').select()};$('codeInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('markBtn').click()});$('cameraBtn').onclick=startCamera;$('stopCameraBtn').onclick=stopCamera;$('retryBtn').onclick=async()=>{const btn=$('retryBtn'),old=btn.textContent;btn.disabled=true;btn.textContent='Sincronizando...';try{await loadRosterFromPrincipal(true);await syncPending();await render();await renderShiftTable(true)}finally{btn.disabled=false;btn.textContent=old}};$('exportBtn').onclick=exportCsv;
 $('searchInput').addEventListener('input',e=>{let q=norm(e.target.value);if(q.length<2){$('searchResults').innerHTML='';return}let found=ROSTER.filter(p=>norm(p.nome).includes(q)).slice(0,8);$('searchResults').innerHTML=found.map(p=>`<div style="padding:8px 0;border-bottom:1px solid #edf1f5"><b>${esc(p.nome)}</b><br>Groot ID: ${esc(p.grootId||p.id)} <button class="success" style="padding:5px 8px;margin-left:6px" onclick="document.getElementById('codeInput').value='${esc(p.grootId||p.id)}';document.getElementById('markBtn').click()">Marcar</button></div>`).join('')||'Nenhum nome encontrado.'});
 $('lateToggle').onclick=()=>{$('latePanel').classList.toggle('open')};$('historyDate').value=nowParts().date;$('historyBtn').onclick=renderHistory;$('historyDate').addEventListener('change',renderHistory);$('historySearch').addEventListener('input',renderHistory);$('alertOkBtn').onclick=closePointAlert;$('alertOverlay').addEventListener('click',e=>{if(e.target===$('alertOverlay'))return});$('folgaNoBtn').onclick=()=>{let x=pendingFolgaMark;showResult(x&&x.p,x&&x.mode==='unknown'?'Registro cancelado: calendário de folga não configurado para esta data.':'Registro cancelado: colaborador está de folga hoje.',false);closeFolgaConfirm()};$('folgaYesBtn').onclick=async()=>{let x=pendingFolgaMark;if(!x)return;$('folgaOverlay').classList.remove('show');pendingFolgaMark=null;await registerPerson(x.p,x.source,x.mode==='folga');$('codeInput').value='';$('codeInput').focus()};updateClock();setInterval(updateClock,1000);
-window.addEventListener('online',async()=>{await loadRosterFromPrincipal(true);await render();syncPending()});window.addEventListener('offline',render);setInterval(syncPending,30000);
-// Antes o render() só rodava aqui quando navigator.onLine===true. Se o coletor
-// ficasse offline (sem rede, ex.: madrugada), o painel congelava mostrando os
-// dados de ontem e só se corrigia quando a rede voltasse. Agora o render()
-// (que só usa dados locais + o que já estiver em cache) roda sempre a cada 5s;
-// somente a busca no Principal (rede) continua condicionada a estar online.
-setInterval(async()=>{if(navigator.onLine){try{await loadRosterFromPrincipal(true)}catch(e){}}await render()},5000);
-// Se o app ficar em segundo plano/tela apagada (comum em coletor/kiosk), o
-// navegador pode pausar os timers. Ao voltar a ficar visível, força um
-// render() imediato em vez de esperar o próximo tick de 5s.
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){lastKnownRenderDate=nowParts().date;render()}});
-(async()=>{await loadRosterFromPrincipal(true);await render();setTimeout(syncPending,600)})();
+window.addEventListener('online',async()=>{await loadRosterFromPrincipal(true);await render();syncPending()});window.addEventListener('offline',render);setInterval(syncPending,30000);setInterval(async()=>{if(navigator.onLine){await loadRosterFromPrincipal(true);await render()}},5000);(async()=>{await loadRosterFromPrincipal(true);await render();setTimeout(syncPending,600)})();
 </script></body></html>
