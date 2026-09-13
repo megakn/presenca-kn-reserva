@@ -21,6 +21,7 @@ input{width:100%;padding:15px;border:1px solid #cbd8e6;border-radius:12px;font-s
 .shift-table{width:100%;margin:0;border:0;border-radius:0;border-collapse:collapse}.shift-table th,.shift-table td{padding:6px 8px;font-size:11px;text-align:center;border-bottom:1px solid #e7eef5}.shift-table th{background:#fbfdff;color:#31506c;font-size:10px;text-transform:uppercase;letter-spacing:.02em}.shift-table th:first-child,.shift-table td:first-child{text-align:left}.shift-table tbody tr:last-child td{border-bottom:0}.shift-table .qty{font-weight:800;color:#173b5b}.shift-table .expected{font-weight:900;color:#0a5f9f}.shift-table .present{font-weight:900;color:#0d7d52}.shift-table .pendingShift{font-weight:900;color:#b36b00}
 .history-wrap{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}.history-card{padding:18px}.history-toolbar{display:grid;grid-template-columns:180px 1fr auto;gap:10px;align-items:center;margin:8px 0 12px}.count-chip{margin-left:auto;background:#e9f4ff;color:#0a5f9f;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:800}.empty-note{padding:18px;text-align:center;color:var(--muted)}
 table{width:100%;border-collapse:separate;border-spacing:0;border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-top:12px;background:#fff}th,td{text-align:left;padding:10px 9px;border-bottom:1px solid var(--line);font-size:12px}th{background:#f4f8fc;color:#24425f}tr:last-child td{border-bottom:0}tbody tr:hover{background:#f9fcff}.syncok{color:#12805c;font-weight:800}.syncpend{color:#b86a00;font-weight:800}.small{font-size:12px;color:var(--muted)}
+.del-batida-btn{padding:6px 9px;font-size:13px;border-radius:8px;background:#fdeaea;color:#a11f1f;border:1px solid #f3c6c6}.del-batida-btn:hover{background:#f8d5d5}
 #cameraWrap{display:none;margin-top:12px}video{width:100%;max-height:320px;background:#000;border-radius:14px}#searchResults{font-size:13px;color:var(--muted)}
 footer{background:linear-gradient(90deg,#052c54,#0b4f86);color:#d6e9fa;padding:15px 28px;font-size:12px;display:flex;justify-content:space-between;align-items:center}footer strong{color:#fff;letter-spacing:.04em}
 @media(max-width:900px){.grid,.history-wrap{grid-template-columns:1fr}.history-toolbar{grid-template-columns:1fr}.count-chip{margin-left:0;width:max-content}.destinations{grid-template-columns:1fr}.shift-table th,.shift-table td{padding:6px 5px;font-size:10px}}}
@@ -99,8 +100,8 @@ footer{background:linear-gradient(90deg,#052c54,#0b4f86);color:#d6e9fa;padding:1
 </div>
 </section></div>
 <div class="history-wrap">
-<section class="card history-card"><div class="panel-title"><div class="panel-icon">◷</div><div><h2>Batidas de hoje</h2><small>Os registros permanecem aqui até a data virar</small></div><span id="todayChip" class="count-chip">0 registros hoje</span></div><table><thead><tr><th>Hora</th><th>Nome</th><th>ID</th><th>Principal</th><th>Sheets</th></tr></thead><tbody id="logBody"></tbody></table></section>
-<section class="card history-card"><div class="panel-title"><div class="panel-icon">▤</div><div><h2>Histórico</h2><small>Consulte registros de outras datas</small></div></div><div class="history-toolbar"><input id="historyDate" type="date"><input id="historySearch" placeholder="Buscar por nome ou ID"><button id="historyBtn" class="primary">Pesquisar</button></div><div id="historySummary" class="small"></div><table><thead><tr><th>Hora</th><th>Nome</th><th>ID</th><th>Principal</th><th>Sheets</th></tr></thead><tbody id="historyBody"></tbody></table></section>
+<section class="card history-card"><div class="panel-title"><div class="panel-icon">◷</div><div><h2>Batidas de hoje</h2><small>Os registros permanecem aqui até a data virar</small></div><span id="todayChip" class="count-chip">0 registros hoje</span></div><table><thead><tr><th>Hora</th><th>Nome</th><th>ID</th><th>Principal</th><th>Sheets</th><th>Ações</th></tr></thead><tbody id="logBody"></tbody></table></section>
+<section class="card history-card"><div class="panel-title"><div class="panel-icon">▤</div><div><h2>Histórico</h2><small>Consulte registros de outras datas</small></div></div><div class="history-toolbar"><input id="historyDate" type="date"><input id="historySearch" placeholder="Buscar por nome ou ID"><button id="historyBtn" class="primary">Pesquisar</button></div><div id="historySummary" class="small"></div><table><thead><tr><th>Hora</th><th>Nome</th><th>ID</th><th>Principal</th><th>Sheets</th><th>Ações</th></tr></thead><tbody id="historyBody"></tbody></table></section>
 </div></main><footer><strong>KUEHNE+NAGEL</strong><span>People. Partnership. Performance.</span></footer>
 <div id="alertOverlay" class="alert-overlay" role="dialog" aria-modal="true" aria-labelledby="alertTitle"><div id="alertModal" class="alert-modal"><div class="alert-triangle">⚠</div><div id="alertTitle" class="alert-title">PONTO NÃO REGISTRADO!</div><div id="alertReason" class="alert-reason">Não foi possível registrar.</div><div id="alertDetail" class="alert-detail">Verifique o código e tente novamente.</div><button id="alertOkBtn" class="alert-ok">✓ OK</button></div></div>
 <div id="folgaOverlay" class="folga-overlay" role="dialog" aria-modal="true"><div class="folga-modal"><div class="folga-icon">⚠️</div><div id="folgaTitle" class="folga-title">COLABORADOR DE FOLGA HOJE</div><div id="folgaName" class="folga-name"></div><div id="folgaDetail" class="folga-detail">A escala deste colaborador está marcada como folga. Deseja registrar mesmo assim como <b>Troca de folga</b>?</div><div class="folga-actions"><button id="folgaNoBtn" class="folga-no">Não registrar</button><button id="folgaYesBtn" class="folga-yes">Sim, fazer a troca</button></div></div></div>
@@ -482,8 +483,63 @@ function rowHtml(r){
   const principalLabel=r.principalSync==='synced'?'✓':'Pendente'+(r.principalError?`<br><span class="small">${esc(r.principalError)}</span>`:'');
   const sheetLabel=r.sheetSync==='synced'?'✓':(r.sheetSync==='sent'?'Enviado ⏳':(r.sheetSync==='unknown'?'—':'Pendente'));
   const sheetErrLine=r.sheetError?`<br><span class="small">${esc(r.sheetError)}</span>`:'';
-  return `<tr><td>${esc(r.time)}</td><td>${esc(r.nome)}</td><td>${esc(r.grootId||r.personId)}</td><td class="${r.principalSync==='synced'?'syncok':'syncpend'}">${principalLabel}</td><td class="${r.sheetSync==='synced'?'syncok':(r.sheetSync==='unknown'?'':'syncpend')}">${sheetLabel}${sheetErrLine}</td></tr>`;
+  return `<tr><td>${esc(r.time)}</td><td>${esc(r.nome)}</td><td>${esc(r.grootId||r.personId)}</td><td class="${r.principalSync==='synced'?'syncok':'syncpend'}">${principalLabel}</td><td class="${r.sheetSync==='synced'?'syncok':(r.sheetSync==='unknown'?'':'syncpend')}">${sheetLabel}${sheetErrLine}</td><td><button type="button" class="del-batida-btn" data-event-id="${esc(r.eventId||'')}" data-person-id="${esc(r.personId||'')}" data-date="${esc(r.date||'')}" data-nome="${esc(r.nome||'')}" title="Excluir esta batida">🗑 Excluir</button></td></tr>`;
 }
+async function deleteBatidaSupabase(personId,date){
+  try{
+    const url=SUPABASE_URL+'/rest/v1/'+TB_REG+
+      '?colaborador_id=eq.'+encodeURIComponent(String(personId))+
+      '&data=eq.'+encodeURIComponent(String(date));
+    const res=await fetch(url,{
+      method:'DELETE',
+      headers:{
+        'apikey':SUPABASE_ANON_KEY,
+        'Authorization':'Bearer '+SUPABASE_ANON_KEY,
+        'Prefer':'return=minimal'
+      }
+    });
+    return res.ok;
+  }catch(e){
+    return false;
+  }
+}
+async function deleteBatida(eventId,personId,date,nome){
+  if(!personId||!date){ return; }
+  const ok=window.confirm('Excluir a batida de '+(nome||'este colaborador')+' ('+date.split('-').reverse().join('/')+')?\n\nIsso remove o registro local e o registro no Principal (Supabase), liberando o colaborador para bater o ponto de novo (teste).\n\nObs.: uma linha já enviada ao Google Sheets não é apagada por aqui.');
+  if(!ok) return;
+
+  // Remove do armazenamento local (Reserva)
+  let regs=loadRegs().map(normalizeOld);
+  regs=regs.filter(r=>{
+    if(eventId && r.eventId===eventId) return false;
+    if(!eventId && String(r.personId)===String(personId) && String(r.date)===String(date)) return false;
+    return true;
+  });
+  saveRegs(regs);
+
+  // Remove do Principal (Supabase), se houver internet
+  let remoteOk=true;
+  if(navigator.onLine){
+    remoteOk=await deleteBatidaSupabase(personId,date);
+  }else{
+    remoteOk=false;
+  }
+
+  showResult(null,
+    remoteOk
+      ? 'Batida excluída. Pode registrar novamente para testar.'
+      : 'Batida local excluída, mas não foi possível confirmar a remoção no Principal (sem internet ou erro). Verifique a conexão antes de testar de novo.',
+    remoteOk
+  );
+
+  await loadRosterFromPrincipal(true).catch(()=>{});
+  await render();
+}
+document.addEventListener('click',e=>{
+  const btn=e.target.closest('.del-batida-btn');
+  if(!btn) return;
+  deleteBatida(btn.dataset.eventId,btn.dataset.personId,btn.dataset.date,btn.dataset.nome);
+});
 async function principalHistory(date){
   const url=SUPABASE_URL+'/rest/v1/'+TB_REG+
     '?data=eq.'+encodeURIComponent(String(date))+
@@ -550,7 +606,7 @@ async function renderHistory(){
   let list=merged.filter(r=>!q || norm(r.nome).includes(q) || norm(r.grootId||r.personId).includes(q) || norm(r.matricula||'').includes(q));
   list.sort((a,b)=>String(b.time||'').localeCompare(String(a.time||'')));
   $('historySummary').textContent=`${list.length} registro(s) encontrado(s) em ${date.split('-').reverse().join('/')} • ${sourceNote}`;
-  $('historyBody').innerHTML=list.slice(0,300).map(rowHtml).join('')||'<tr><td colspan="5" class="empty-note">Nenhum registro encontrado para esta data.</td></tr>';
+  $('historyBody').innerHTML=list.slice(0,300).map(rowHtml).join('')||'<tr><td colspan="6" class="empty-note">Nenhum registro encontrado para esta data.</td></tr>';
 }
 
 const SHIFT_TIMES=[
@@ -1041,7 +1097,7 @@ async function render(){
   todayMerged.sort((a,b)=>String(b.time||'').localeCompare(String(a.time||'')));
 
   $('logBody').innerHTML=todayMerged.slice(0,300).map(rowHtml).join('')||
-    '<tr><td colspan="5" class="empty-note">Nenhuma batida registrada hoje.</td></tr>';
+    '<tr><td colspan="6" class="empty-note">Nenhuma batida registrada hoje.</td></tr>';
 
   if($('todayChip')){
     $('todayChip').textContent=todayMerged.length+' registro'+(todayMerged.length===1?'':'s')+' hoje';
