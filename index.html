@@ -100,7 +100,7 @@ footer{background:linear-gradient(90deg,#052c54,#0b4f86);color:#d6e9fa;padding:1
 </div>
 </section></div>
 <div class="history-wrap">
-<section class="card history-card"><div class="panel-title"><div class="panel-icon">◷</div><div><h2>Batidas de hoje</h2><small>Os registros permanecem aqui até a data virar</small></div><span id="todayChip" class="count-chip">0 registros hoje</span></div><table><thead><tr><th>Hora</th><th>Nome</th><th>ID</th><th>Principal</th><th>Sheets</th><th>Ações</th></tr></thead><tbody id="logBody"></tbody></table></section>
+<section class="card history-card"><div class="panel-title"><div class="panel-icon">◷</div><div><h2>Batidas de hoje</h2><small>Os registros permanecem aqui até a data virar</small></div><span id="todayChip" class="count-chip">0 registros hoje</span></div><div class="compact-actions"><button id="auditSheetsBtn" class="success">🔍 Conferir na planilha</button></div><div id="auditResult" class="result" style="display:none"></div><table><thead><tr><th>Hora</th><th>Nome</th><th>ID</th><th>Principal</th><th>Sheets</th><th>Ações</th></tr></thead><tbody id="logBody"></tbody></table></section>
 <section class="card history-card"><div class="panel-title"><div class="panel-icon">▤</div><div><h2>Histórico</h2><small>Consulte registros de outras datas</small></div></div><div class="history-toolbar"><input id="historyDate" type="date"><input id="historySearch" placeholder="Buscar por nome ou ID"><button id="historyBtn" class="primary">Pesquisar</button></div><div id="historySummary" class="small"></div><table><thead><tr><th>Hora</th><th>Nome</th><th>ID</th><th>Principal</th><th>Sheets</th><th>Ações</th></tr></thead><tbody id="historyBody"></tbody></table></section>
 </div></main><footer><strong>KUEHNE+NAGEL</strong><span>People. Partnership. Performance.</span></footer>
 <div id="alertOverlay" class="alert-overlay" role="dialog" aria-modal="true" aria-labelledby="alertTitle"><div id="alertModal" class="alert-modal"><div class="alert-triangle">⚠</div><div id="alertTitle" class="alert-title">PONTO NÃO REGISTRADO!</div><div id="alertReason" class="alert-reason">Não foi possível registrar.</div><div id="alertDetail" class="alert-detail">Verifique o código e tente novamente.</div><button id="alertOkBtn" class="alert-ok">✓ OK</button></div></div>
@@ -1020,6 +1020,138 @@ async function getTodayOperationalData(){
   return {today,localRegs,remote,recordsByPerson,rows,source};
 }
 
+// ---------- Conferência da planilha (Sheets) ----------
+// Junta todo mundo que bateu presença hoje (local deste aparelho + Principal,
+// que já tem o que todos os outros aparelhos mandaram) e pergunta pro Apps
+// Script, um por um, se cada batida realmente está gravada na planilha —
+// em vez de confiar no indicador "Sheets" da tela, que só reflete o que
+// ESTE aparelho conseguiu confirmar (fica "—"/pendente pra batidas de
+// outros aparelhos mesmo quando elas já estão certinhas na planilha).
+async function buildTodayAuditList(){
+  const today=nowParts().date;
+  const dayData=await getTodayOperationalData();
+  const byId=new Map();
+  dayData.localRegs.filter(r=>isValidCalendarTodayLocal(r,today)).forEach(r=>{
+    const id=String(r.personId||r.grootId||'');
+    if(!id) return;
+    byId.set(id,{eventId:r.eventId,grootId:String(r.grootId||id),personId:id,matricula:r.matricula||'',ext:r.ext||'',nome:r.nome,escala:r.escala||'',date:r.date,time:r.time});
+  });
+  (dayData.remote||[]).forEach(rr=>{
+    const id=String(rr.colaborador_id||'');
+    if(!id || byId.has(id)) return;
+    const p=ROSTER.find(x=>String(x.id||x.grootId)===id);
+    byId.set(id,{
+      eventId:'PRINCIPAL-'+id+'-'+today,
+      grootId:p?String(p.grootId||p.id):id,
+      personId:id,
+      matricula:p?String(p.matricula||''):'',
+      ext:p?String(p.ext||''):'',
+      nome:p?p.nome:'Colaborador ID '+id,
+      escala:p?String(p.escala||''):'',
+      date:String(rr.data||today),
+      time:String(rr.hora||'')
+    });
+  });
+  return Array.from(byId.values());
+}
+
+async function checkOneInSheet(item){
+  try{
+    const st=await jsonpSheetStatus({eventId:item.eventId,grootId:item.grootId,date:item.date},6500);
+    return !!(st && st.ok===true && st.found===true);
+  }catch(e){
+    return false;
+  }
+}
+
+async function resendToSheet(item){
+  return postSheet({
+    eventId:item.eventId,
+    grootId:item.grootId,
+    personId:item.personId,
+    matricula:item.matricula||'',
+    ext:item.ext||'',
+    nome:item.nome,
+    escala:item.escala||'',
+    date:item.date,
+    time:item.time,
+    source:'auditoria',
+    deviceId:deviceId(),
+    principalSync:'synced',
+    sheetSync:'pending'
+  });
+}
+
+let auditRunning=false;
+async function runSheetAudit(){
+  if(auditRunning) return;
+  auditRunning=true;
+  const box=$('auditResult');
+  const btn=$('auditSheetsBtn');
+  const oldLabel=btn?btn.textContent:'';
+  if(btn){ btn.disabled=true; btn.textContent='Conferindo...'; }
+  if(box){ box.style.display='block'; box.className='result'; box.innerHTML='Consultando a planilha, aguarde...'; }
+  try{
+    const list=await buildTodayAuditList();
+    const missing=[];
+    let confirmed=0;
+    // Checa em pequenos lotes pra não abrir muitas requisições JSONP de uma vez.
+    const BATCH=4;
+    for(let i=0;i<list.length;i+=BATCH){
+      const slice=list.slice(i,i+BATCH);
+      const results=await Promise.all(slice.map(item=>checkOneInSheet(item)));
+      results.forEach((ok,idx)=>{
+        if(ok) confirmed++;
+        else missing.push(slice[idx]);
+      });
+      if(box) box.innerHTML='Consultando a planilha... '+Math.min(i+BATCH,list.length)+' de '+list.length;
+    }
+    lastAuditMissing=missing;
+    if(!box){ return; }
+    if(!missing.length){
+      box.className='result ok';
+      box.innerHTML='<div class="name">✓ Tudo certo</div><div class="meta">'+confirmed+' de '+list.length+' batida(s) de hoje confirmadas na planilha. Nenhuma faltando.</div>';
+    }else{
+      const rowsHtml=missing.map((m,idx)=>
+        `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #e7eef5">`+
+        `<span>${esc(m.time||'--:--')} — ${esc(m.nome)} <span class="small">(${esc(m.grootId||m.personId)})</span></span>`+
+        `<button type="button" class="success audit-resend-btn" data-idx="${idx}" style="padding:5px 9px;font-size:11px">Reenviar à planilha</button>`+
+        `</div>`
+      ).join('');
+      box.className='result';
+      box.innerHTML='<div class="name">⚠ '+missing.length+' faltando na planilha</div>'+
+        '<div class="meta">'+confirmed+' de '+list.length+' confirmadas. Os que faltam:</div>'+
+        '<div style="margin-top:8px">'+rowsHtml+'</div>';
+    }
+  }catch(e){
+    if(box){ box.className='result'; box.innerHTML='Não foi possível conferir agora: '+esc(String((e&&e.message)||e)); }
+  }finally{
+    auditRunning=false;
+    if(btn){ btn.disabled=false; btn.textContent=oldLabel; }
+  }
+}
+let lastAuditMissing=[];
+document.addEventListener('click',async e=>{
+  const btn=e.target.closest('.audit-resend-btn');
+  if(!btn) return;
+  const idx=parseInt(btn.dataset.idx,10);
+  const item=lastAuditMissing[idx];
+  if(!item) return;
+  btn.disabled=true;
+  btn.textContent='Enviando...';
+  const res=await resendToSheet(item);
+  if(res.ok){
+    btn.textContent='Enviado ⏳ confirmando...';
+    setTimeout(async()=>{
+      const ok=await checkOneInSheet(item);
+      btn.textContent=ok?'✓ Confirmado':'Enviado, aguardando';
+    },1500);
+  }else{
+    btn.disabled=false;
+    btn.textContent='Falhou, tentar de novo';
+  }
+});
+
 async function renderShiftTable(force=false,data=null){
   if(!$('shiftBody')||shiftRefreshBusy)return;
   const now=Date.now();
@@ -1111,6 +1243,7 @@ async function startCamera(){if(!('BarcodeDetector' in window)){showResult(null,
 function stopCamera(){scanning=false;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$('cameraWrap').style.display='none'}
 async function scanLoop(){if(!scanning)return;try{let det=new BarcodeDetector({formats:['qr_code','code_128','code_39','ean_13','ean_8']});let codes=await det.detect($('video'));if(codes&&codes[0]){let value=codes[0].rawValue;stopCamera();$('codeInput').value=value;markByCode(value,'camera');return}}catch(e){}requestAnimationFrame(scanLoop)}
 $('markBtn').onclick=()=>{markByCode($('codeInput').value);$('codeInput').select()};$('codeInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('markBtn').click()});$('cameraBtn').onclick=startCamera;$('stopCameraBtn').onclick=stopCamera;$('retryBtn').onclick=async()=>{const btn=$('retryBtn'),old=btn.textContent;btn.disabled=true;btn.textContent='Sincronizando...';try{await loadRosterFromPrincipal(true);await syncPending();await render();await renderShiftTable(true)}finally{btn.disabled=false;btn.textContent=old}};$('exportBtn').onclick=exportCsv;
+$('auditSheetsBtn').onclick=runSheetAudit;
 $('searchInput').addEventListener('input',e=>{let q=norm(e.target.value);if(q.length<2){$('searchResults').innerHTML='';return}let found=ROSTER.filter(p=>norm(p.nome).includes(q)).slice(0,8);$('searchResults').innerHTML=found.map(p=>`<div style="padding:8px 0;border-bottom:1px solid #edf1f5"><b>${esc(p.nome)}</b><br>Groot ID: ${esc(p.grootId||p.id)} <button class="success" style="padding:5px 8px;margin-left:6px" onclick="document.getElementById('codeInput').value='${esc(p.grootId||p.id)}';document.getElementById('markBtn').click()">Marcar</button></div>`).join('')||'Nenhum nome encontrado.'});
 $('lateToggle').onclick=()=>{$('latePanel').classList.toggle('open')};$('historyDate').value=nowParts().date;$('historyBtn').onclick=renderHistory;$('historyDate').addEventListener('change',renderHistory);$('historySearch').addEventListener('input',renderHistory);$('alertOkBtn').onclick=closePointAlert;$('alertOverlay').addEventListener('click',e=>{if(e.target===$('alertOverlay'))return});$('folgaNoBtn').onclick=()=>{let x=pendingFolgaMark;showResult(x&&x.p,x&&x.mode==='unknown'?'Registro cancelado: calendário de folga não configurado para esta data.':'Registro cancelado: colaborador está de folga hoje.',false);closeFolgaConfirm()};$('folgaYesBtn').onclick=async()=>{let x=pendingFolgaMark;if(!x)return;$('folgaOverlay').classList.remove('show');pendingFolgaMark=null;await registerPerson(x.p,x.source,x.mode==='folga');$('codeInput').value='';$('codeInput').focus()};updateClock();setInterval(updateClock,1000);
 window.addEventListener('online',async()=>{await loadRosterFromPrincipal(true);await render();syncPending()});window.addEventListener('offline',render);setInterval(syncPending,30000);setInterval(async()=>{if(navigator.onLine){await loadRosterFromPrincipal(true);await render()}},5000);(async()=>{await loadRosterFromPrincipal(true);await render();setTimeout(syncPending,600)})();
