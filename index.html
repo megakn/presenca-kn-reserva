@@ -65,7 +65,7 @@ footer{background:linear-gradient(90deg,#052c54,#0b4f86);color:#d6e9fa;padding:1
 </style>
 </head>
 <body>
-<header><div><h1>Presença KN</h1><small>Contingência independente — Principal + Google Sheets</small></div><div class="header-right"><div class="clock-box"><div id="liveDate" class="clock-date">--/--/----</div><div id="liveTime" class="clock-time">--:--:--</div></div><span class="header-dot"></span><span class="header-live">Sistema ativo</span></div></header>
+<header><div><h1>Presença KN</h1><small>Contingência independente — Principal + Google Sheets (via Supabase)</small></div><div class="header-right"><div class="clock-box"><div id="liveDate" class="clock-date">--/--/----</div><div id="liveTime" class="clock-time">--:--:--</div></div><span class="header-dot"></span><span class="header-live">Sistema ativo</span></div></header>
 <main>
 <div class="grid">
 <section class="card"><div class="panel-title"><div class="panel-icon">✓</div><div><h2>Registrar presença</h2><small>Leia o QR/código ou digite Groot ID, matrícula ou EXT</small></div></div>
@@ -116,8 +116,11 @@ const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 const TB_COLAB='kn_presenca_colaboradores';
 const TB_REG='kn_presenca_registros';
 
-// Sheets: Web App do Apps Script. O V4 usa o Apps Script só como API de contingência.
-const SHEETS_WEBAPP_URL='https://script.google.com/macros/s/AKfycbzQefSb5rmbFCfzKYFqg7UUcXRErJ6eEJCh00NYmB22aGfTjyGTpZNS1Bk3x051Rb3Z/exec';
+// Sheets: o aparelho NÃO fala mais direto com script.google.com (rede do
+// bipe pode bloquear domínios do Google). Quem grava na planilha agora é
+// o Apps Script, acionado por um Database Webhook do Supabase assim que a
+// batida entra em kn_presenca_registros. Aqui só conferimos, via Supabase
+// (que o aparelho já alcança), se a coluna sheet_synced ficou true.
 
 let stream=null, scanning=false, syncing=false; const $=id=>document.getElementById(id);
 const FOLGA_ROWS = [["SVC - A","01,02,07,13,19,20,24,25,29,30","05,11,17,18,22,23",""],["SVC - B","03,04,08,09,14,20,26,27","01,02,06,07,12,18,24,25",""],["SVC - C","05,06,10,11,15,16,21,27","03,04,08,09,13,14,19,25",""],["SVC - D","06,12,13,17,18,22,23,28","04,10,11,15,16,20,21",""],["SVC - B1 - 05H / 09H / 10H / 14H48","05,06,11,14,17,22,23,27","03,04,09,12,15,20,21,25,31","01,06,09,12,17,18,22"],["SVC - B2 - 05H / 09H / 10H / 14H48","01,02,06,12,13,18,21,24,29,30","04,10,11,16,19,22,27,28","01,07,08,13,16,19"],["SVC - B3 - 05H / 09H / 10H / 14H48","03,08,09,13,19,20,25,28","01,06,07,11,17,18,23,26,29","03,04,08,14,15,20"],["SVC - B4 - 05H / 09H / 10H / 14H48","04,07,10,15,16,20,26,27","02,05,08,13,14,18,24,25,30","02,05,10,11,15,21,22"],["SVC - C1 - 05H / 09H / 10H / 14H48","05,06,11,16,17,21,22,28","03,04,09,14,15,19,20,26,31","01,06,11,12,16,17"],["SVC - C2 - 05H / 09H / 10H / 14H48","02,03,07,08,14,19,20,25,30","01,05,06,12,17,18,23,28,29","02,03,09,14,15,20"],["SVC - C3 - 05H / 09H / 10H / 14H48","01,07,12,13,18,23,24,28,29","05,10,11,16,21,22,26,27","02,07,08,13,18,19"],["SVC - C4 - 05H / 09H / 10H / 14H48","04,09,10,14,15,21,26,27","02,07,08,12,13,19,24,25,30","04,05,09,10,16,21,22"],["SVC - C1 - 06H / 10H / 11H / 15H48","02,03,07,08,14,19,20,25,30","01,05,06,12,17,18,23,28,29","02,03,09,14,15,20"],["SVC - C2 - 06H / 10H / 11H / 15H48","05,06,11,16,17,21,22,28","03,04,09,14,15,19,20,26,31","01,06,11,12,16,17"],["SVC - C3 - 06H / 09H / 10H / 15H48","04,09,10,14,15,21,26,27","02,07,08,12,13,19,24,25,30","04,05,09,10,16,21,22"],["SVC - C4 - 06H / 10H / 11H / 15H48","01,07,12,13,18,23,24,28,29","05,10,11,16,21,22,26,27","02,07,08,13,18,19"],["SVC - G1 - 08H / 12H / 13H / 17H48","06,07,13,14,20,21,27,28","04,05,11,12,18,19,25,26","01,02,08,09,15,16,22"],["SVC - G2 - 08H / 12H / 13H / 17H48","05,06,12,13,19,20,26,27","03,04,10,11,17,18,24,25,31","01,07,08,14,15,21,22"],["SVC - G1 - 13H / 17H / 18H / 22H48","03,06,12,13,14,20,23,27","01,04,10,11,12,18,21,25,29","01,07,08,09,15,18,22"],["SVC - G2 - 13H / 17H / 18H / 22H48","02,06,10,13,19,20,21,27,30","04,08,11,17,18,19,25,28","01,05,08,14,15,16,22"],["SVC - G3 - 13H / 17H / 18H / 22H48","06,09,13,17,20,26,27,28","04,07,11,15,18,24,25,26","01,04,08,12,15,21,22"],["SVC - G4 - 13H / 17H / 18H / 22H48","05,06,07,13,16,20,24,27","03,04,05,11,14,18,22,25,31","01,02,08,11,15,19,22"],["SVC - A1 - 14H / 18H / 19H / 23H48","01,07,08,14,15,21,22,27,28,29","05,06,12,13,19,20,25,26,27","02,03,09,10,16,17,22"],["SVC - A2 - 14H / 18H / 19H / 23H48","01,06,07,08,14,15,21,22,28,29","04,05,06,12,13,19,20,26,27","01,02,03,09,10,16,17"],["SVC - A3 - 14H / 18H / 19H / 23H48","01,07,08,13,14,15,21,22,28,29","05,06,11,12,13,19,20,26,27","02,03,08,09,10,16,17"],["SVC - A4 - 14H / 18H / 19H / 23H48","01,07,08,14,15,20,21,22,28,29","05,06,12,13,18,19,20,26,27","02,03,09,10,15,16,17"],["SVC - G1 - 23H / 03H / 04H / 08H48","01,02,08,12,13,18,21,24,29,30","06,10,11,16,19,22,27,28","03,07,08,13,16,19"],["SVC - G2 - 23H / 03H / 04H / 08H48","04,07,10,15,16,22,26,27","02,05,08,13,14,20,24,25,30","02,05,10,11,17,21,22"],["SVC - G3 - 23H / 03H / 04H / 08H48","03,08,09,15,19,20,25,28","01,06,07,13,17,18,23,26,29","03,04,10,14,15,20"],["SVC - G4 - 23H / 03H / 04H / 08H48","01,05,06,11,14,17,22,23,29","03,04,09,12,15,20,21,27,31","01,06,09,12,17,18"]];
@@ -297,7 +300,7 @@ async function registerPerson(p,source='manual',trocaFolga=false){
   saveRegs(regs);
 
   let msg=(trocaFolga?'Troca de folga registrada':(isLate?'Atraso registrado':'Presença registrada'))+' às '+r.time+'.';
-  if(div.has) msg+=' ATENÇÃO: '+div.message;
+  if(div.has) msg+=' '+div.message;
   else msg+=' Horário cadastrado: '+div.shift+'.';
 
   showResult(p,msg,true);
@@ -305,15 +308,11 @@ async function registerPerson(p,source='manual',trocaFolga=false){
   beep();
   syncPending();
 
-  // Divergência de horário nunca impede a presença.
-  // Apenas informa em amarelo depois que o registro já foi salvo.
-  if(div.has){
-    showPointAlert(
-      'Presença registrada com atenção.',
-      p.nome+' foi registrado(a) normalmente. '+div.message,
-      'attention'
-    );
-  }
+  // Divergência de horário (atraso, entrada antecipada, ou horário/escala
+  // não identificado no cadastro) NUNCA impede a presença e NÃO dispara
+  // mais o alerta sonoro/modal — fica só a nota discreta no card acima.
+  // O alerta (com som e tela vermelha/amarela) continua existindo só para
+  // colaborador não cadastrado e QR/código não lido (ver markByCode).
 
   return true;
 }
@@ -351,7 +350,13 @@ async function syncPrincipal(r){
         colaborador_id:String(r.personId),
         data:String(r.date),
         status:r.trocaFolga?'TF':(r.atrasoPrincipal?'AT':'P'),
-        hora:String(r.time)
+        hora:String(r.time),
+        // Guarda a divergência de horário (atraso/entrada antecipada/escala
+        // não identificada) mesmo sem mostrar alerta — fica salva no
+        // Principal e cai na planilha, pra dar pra revisar depois quem
+        // bateu fora da escala cadastrada e corrigir o cadastro.
+        divergencia_tipo:r.divergenciaHorario||null,
+        divergencia_minutos:(r.divergenciaMinutos!=null?r.divergenciaMinutos:null)
       })
     });
     if(!res.ok){
@@ -364,60 +369,28 @@ async function syncPrincipal(r){
   }
 }
 
-function jsonpSheetStatus(r,timeoutMs=8000){
-  return new Promise((resolve)=>{
-    const cb='__knSheetCb_'+Date.now()+'_'+Math.floor(Math.random()*100000);
-    const script=document.createElement('script');
-    let done=false;
-    const finish=(value)=>{
-      if(done)return; done=true;
-      clearTimeout(timer);
-      try{delete window[cb]}catch(_){window[cb]=undefined}
-      try{script.remove()}catch(_){}
-      resolve(value);
-    };
-    window[cb]=(data)=>finish(data||{});
-    const qs=new URLSearchParams({
-      action:'status',
-      event_id:r.eventId||'',
-      groot_id:r.grootId||r.personId||'',
-      data:r.date||'',
-      callback:cb,
-      _:String(Date.now())
-    });
-    script.src=SHEETS_WEBAPP_URL+'?'+qs.toString();
-    script.onerror=()=>finish({ok:false,found:false,error:'Falha ao consultar Sheets'});
-    document.head.appendChild(script);
-    const timer=setTimeout(()=>finish({ok:false,found:false,error:'Tempo esgotado ao consultar Sheets'}),timeoutMs);
-  });
-}
-
-async function confirmSheet(r){
+// Confirma o status do Sheets consultando o próprio Supabase (domínio que o
+// aparelho já alcança), em vez de falar direto com script.google.com. Quem
+// grava sheet_synced=true no Supabase é o Apps Script, disparado pelo
+// Database Webhook do Supabase assim que a batida é inserida em
+// kn_presenca_registros — o aparelho nunca precisa chamar o Google.
+async function checkSheetSynced(r){
   try{
-    const st=await jsonpSheetStatus(r,6500);
-    if(st && (st.ok===true || st.found===true)){
-      return {ok:true,confirmed:true};
-    }
-    return {ok:false,confirmed:false,error:(st&&st.error)||'Ainda não confirmado pelo Sheets'};
+    const url=SUPABASE_URL+'/rest/v1/'+TB_REG+
+      '?colaborador_id=eq.'+encodeURIComponent(String(r.personId))+
+      '&data=eq.'+encodeURIComponent(String(r.date))+
+      '&select=sheet_synced,sheet_error&limit=1';
+    const res=await fetch(url,{headers:{
+      'apikey':SUPABASE_ANON_KEY,
+      'Authorization':'Bearer '+SUPABASE_ANON_KEY
+    }});
+    if(!res.ok) throw new Error('Consulta de status HTTP '+res.status);
+    const rows=await res.json();
+    const row=Array.isArray(rows)&&rows.length?rows[0]:null;
+    if(row&&row.sheet_synced===true) return {confirmed:true};
+    return {confirmed:false,error:(row&&row.sheet_error)||'Aguardando o Supabase confirmar a gravação na planilha'};
   }catch(e){
-    return {ok:false,confirmed:false,error:String((e&&e.message)||e)};
-  }
-}
-
-async function postSheet(r){
-  try{
-    const body=new URLSearchParams({payload:JSON.stringify(r)});
-    await fetch(SHEETS_WEBAPP_URL,{
-      method:'POST',
-      mode:'no-cors',
-      headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
-      body:body.toString()
-    });
-    // "sent" significa somente que o navegador conseguiu despachar a requisição.
-    // "synced" só será usado após o endpoint status confirmar o registro.
-    return {ok:true,sent:true};
-  }catch(e){
-    return {ok:false,error:String((e&&e.message)||e)};
+    return {confirmed:false,error:String((e&&e.message)||e)};
   }
 }
 
@@ -435,37 +408,26 @@ async function syncPending(){
       }
 
       if(r.sheetSync!=='synced'){
-        // Se ainda não foi enviado nesta versão, despacha uma única vez.
-        if(r.sheetSync!=='sent'){
-          const s=await postSheet(r);
-          if(s.ok){
-            r.sheetSync='sent';
-            r.sheetUnconfirmed=true;
-            r.sheetError='Enviado; aguardando confirmação do Sheets';
-          }else{
-            r.sheetSync='pending';
-            r.sheetUnconfirmed=false;
-            r.sheetError=s.error||'erro no Sheets';
-          }
-          changed=true;
-          saveRegs(regs);
-          render();
-          if(s.ok) await new Promise(resolve=>setTimeout(resolve,900));
-        }
-
-        // Confirmação independente. Se a consulta não funcionar, permanece "Enviado ⏳".
-        if(r.sheetSync==='sent'){
-          const c=await confirmSheet(r);
+        // O envio pro Sheets agora é responsabilidade do Supabase (Database
+        // Webhook -> Apps Script), não mais do aparelho. Aqui só conferimos
+        // se já foi confirmado — e só depois que o Principal confirmar,
+        // porque sem a linha no Supabase o webhook nem chega a disparar.
+        if(r.principalSync==='synced'){
+          const c=await checkSheetSynced(r);
           if(c.confirmed){
             r.sheetSync='synced';
             r.sheetUnconfirmed=false;
             r.sheetError='';
           }else{
-            r.sheetUnconfirmed=true;
-            r.sheetError=c.error||'Aguardando confirmação do Sheets';
+            r.sheetSync='pending';
+            r.sheetUnconfirmed=false;
+            r.sheetError=c.error||'Aguardando a planilha confirmar';
           }
-          changed=true;
+        }else{
+          r.sheetSync='pending';
+          r.sheetError='Aguardando confirmar no Principal antes de checar a planilha';
         }
+        changed=true;
       }
 
       r.lastTryAt=new Date().toISOString();
@@ -481,7 +443,7 @@ async function syncPending(){
 function overallPending(r){return r.principalSync!=='synced'||r.sheetSync!=='synced'}
 function rowHtml(r){
   const principalLabel=r.principalSync==='synced'?'✓':'Pendente'+(r.principalError?`<br><span class="small">${esc(r.principalError)}</span>`:'');
-  const sheetLabel=r.sheetSync==='synced'?'✓':(r.sheetSync==='sent'?'Enviado ⏳':(r.sheetSync==='unknown'?'—':'Pendente'));
+  const sheetLabel=r.sheetSync==='synced'?'✓':(r.sheetSync==='unknown'?'—':'Pendente');
   const sheetErrLine=r.sheetError?`<br><span class="small">${esc(r.sheetError)}</span>`:'';
   return `<tr><td>${esc(r.time)}</td><td>${esc(r.nome)}</td><td>${esc(r.grootId||r.personId)}</td><td class="${r.principalSync==='synced'?'syncok':'syncpend'}">${principalLabel}</td><td class="${r.sheetSync==='synced'?'syncok':(r.sheetSync==='unknown'?'':'syncpend')}">${sheetLabel}${sheetErrLine}</td><td><button type="button" class="del-batida-btn" data-event-id="${esc(r.eventId||'')}" data-person-id="${esc(r.personId||'')}" data-date="${esc(r.date||'')}" data-nome="${esc(r.nome||'')}" title="Excluir esta batida">🗑</button></td></tr>`;
 }
@@ -1055,31 +1017,67 @@ async function buildTodayAuditList(){
   return Array.from(byId.values());
 }
 
+// Checa direto no Supabase (não mais em script.google.com) se a coluna
+// sheet_synced dessa batida já foi confirmada pelo Apps Script.
 async function checkOneInSheet(item){
   try{
-    const st=await jsonpSheetStatus({eventId:item.eventId,grootId:item.grootId,date:item.date},6500);
-    return !!(st && st.ok===true && st.found===true);
+    const url=SUPABASE_URL+'/rest/v1/'+TB_REG+
+      '?colaborador_id=eq.'+encodeURIComponent(String(item.personId))+
+      '&data=eq.'+encodeURIComponent(String(item.date))+
+      '&select=sheet_synced&limit=1';
+    const res=await fetch(url,{headers:{
+      'apikey':SUPABASE_ANON_KEY,
+      'Authorization':'Bearer '+SUPABASE_ANON_KEY
+    }});
+    if(!res.ok) return false;
+    const rows=await res.json();
+    const row=Array.isArray(rows)&&rows.length?rows[0]:null;
+    return !!(row && row.sheet_synced===true);
   }catch(e){
     return false;
   }
 }
 
+// "Reenviar à planilha" agora funciona regravando o próprio registro no
+// Supabase (mesmos dados, forçando um UPDATE) — isso dispara de novo o
+// Database Webhook que aciona o Apps Script. Não fala mais direto com o
+// Google, então funciona mesmo em aparelhos com rede restrita.
 async function resendToSheet(item){
-  return postSheet({
-    eventId:item.eventId,
-    grootId:item.grootId,
-    personId:item.personId,
-    matricula:item.matricula||'',
-    ext:item.ext||'',
-    nome:item.nome,
-    escala:item.escala||'',
-    date:item.date,
-    time:item.time,
-    source:'auditoria',
-    deviceId:deviceId(),
-    principalSync:'synced',
-    sheetSync:'pending'
-  });
+  try{
+    const getUrl=SUPABASE_URL+'/rest/v1/'+TB_REG+
+      '?colaborador_id=eq.'+encodeURIComponent(String(item.personId))+
+      '&data=eq.'+encodeURIComponent(String(item.date))+
+      '&select=status,hora&limit=1';
+    const getRes=await fetch(getUrl,{headers:{
+      'apikey':SUPABASE_ANON_KEY,
+      'Authorization':'Bearer '+SUPABASE_ANON_KEY
+    }});
+    if(!getRes.ok) throw new Error('Consulta HTTP '+getRes.status);
+    const rows=await getRes.json();
+    const cur=Array.isArray(rows)&&rows.length?rows[0]:null;
+    if(!cur) return {ok:false,error:'Registro não encontrado no Principal'};
+
+    const url=SUPABASE_URL+'/rest/v1/'+TB_REG+'?on_conflict=colaborador_id,data';
+    const res=await fetch(url,{
+      method:'POST',
+      headers:{
+        'apikey':SUPABASE_ANON_KEY,
+        'Authorization':'Bearer '+SUPABASE_ANON_KEY,
+        'Content-Type':'application/json',
+        'Prefer':'resolution=merge-duplicates,return=minimal'
+      },
+      body:JSON.stringify({
+        colaborador_id:String(item.personId),
+        data:String(item.date),
+        status:cur.status||'',
+        hora:cur.hora||''
+      })
+    });
+    if(!res.ok) throw new Error('Reenvio HTTP '+res.status);
+    return {ok:true};
+  }catch(e){
+    return {ok:false,error:String((e&&e.message)||e)};
+  }
 }
 
 let auditRunning=false;
@@ -1186,10 +1184,9 @@ async function render(){
   $('pendingCount').textContent=pendingPeople;
 
   let pp=regs.filter(r=>r.principalSync!=='synced').length,
-      sp=regs.filter(r=>r.sheetSync==='pending').length,
-      ss=regs.filter(r=>r.sheetSync==='sent').length;
+      sp=regs.filter(r=>r.sheetSync==='pending').length;
   $('principalText').textContent=pp?pp+' registro(s) pendente(s) para o Principal':'Sincronizado com o Principal';
-  $('sheetText').textContent=sp?(sp+' pendente(s) de envio'+(ss?' • '+ss+' enviado(s), aguardando confirmação':'')):(ss?ss+' enviado(s), aguardando confirmação':'Sincronizado e confirmado no Google Sheets');
+  $('sheetText').textContent=sp?sp+' pendente(s) de confirmação na planilha':'Sincronizado e confirmado no Google Sheets';
 
   // Batidas de hoje: junta Reserva + Principal e elimina duplicidade por colaborador.
   const todayMerged=[];
@@ -1238,7 +1235,7 @@ async function render(){
   renderHistory();
   renderShiftTable(true,dayData);
 }
-function exportCsv(){let regs=loadRegs().map(normalizeOld);let rows=[['event_id','groot_id','matricula','ext','nome','escala','data','hora','origem','dispositivo','principal_sync','sheets_sync'],...regs.map(r=>[r.eventId,r.grootId,r.matricula,r.ext,r.nome,r.escala,r.date,r.time,'RESERVA',r.deviceId,r.principalSync,r.sheetSync])];let csv=rows.map(row=>row.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\n');let blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='presenca_kn_reserva_v4_'+nowParts().date+'.csv';a.click();URL.revokeObjectURL(a.href)}
+function exportCsv(){let regs=loadRegs().map(normalizeOld);let rows=[['event_id','groot_id','matricula','ext','nome','escala','data','hora','origem','dispositivo','principal_sync','sheets_sync','divergencia_tipo','divergencia_minutos'],...regs.map(r=>[r.eventId,r.grootId,r.matricula,r.ext,r.nome,r.escala,r.date,r.time,'RESERVA',r.deviceId,r.principalSync,r.sheetSync,r.divergenciaHorario||'',r.divergenciaMinutos??''])];let csv=rows.map(row=>row.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\n');let blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='presenca_kn_reserva_v4_'+nowParts().date+'.csv';a.click();URL.revokeObjectURL(a.href)}
 async function startCamera(){if(!('BarcodeDetector' in window)){showResult(null,'Este navegador não oferece leitura nativa por câmera. Use Chrome atualizado ou digite o código.',false);showPointAlert('Leitor de QR indisponível.','Este navegador não oferece leitura nativa por câmera. Use Chrome atualizado ou digite o código.');return}try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});$('video').srcObject=stream;await $('video').play();$('cameraWrap').style.display='block';scanning=true;scanLoop()}catch(e){showResult(null,'Não foi possível abrir a câmera. Verifique a permissão do navegador.',false);showPointAlert('Câmera não disponível.','Verifique a permissão da câmera no navegador e tente novamente.')}}
 function stopCamera(){scanning=false;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$('cameraWrap').style.display='none'}
 async function scanLoop(){if(!scanning)return;try{let det=new BarcodeDetector({formats:['qr_code','code_128','code_39','ean_13','ean_8']});let codes=await det.detect($('video'));if(codes&&codes[0]){let value=codes[0].rawValue;stopCamera();$('codeInput').value=value;markByCode(value,'camera');return}}catch(e){}requestAnimationFrame(scanLoop)}
