@@ -90,7 +90,7 @@ footer{background:linear-gradient(90deg,#052c54,#0b4f86);color:#d6e9fa;padding:1
 </section>
 <section class="card"><div class="neon-panel"><div class="neon-head"><div><h2>Painel de presença</h2><div class="neon-sub">Acompanhamento em tempo real</div></div><div class="live-pill"><span id="netDot" class="dot"></span><span id="netText"></span></div></div><div class="stats"><div class="stat"><b id="todayCount">0</b><span>presenças hoje</span></div><div class="stat"><b id="pendingCount">0</b><span>com pendência</span></div><div class="stat"><b id="rosterCount">0</b><span>colaboradores</span></div></div></div>
 <div class="destinations"><div class="dest"><strong>🏢 Sistema principal</strong><span id="principalText">Verificando...</span></div><div class="dest"><strong>📊 Google Sheets</strong><span id="sheetText">Verificando...</span></div></div>
-<div class="compact-actions"><button id="retryBtn">↻ Sincronizar</button><button id="exportBtn">⇩ Exportar CSV</button></div>
+<div class="compact-actions"><button id="retryBtn">↻ Sincronizar</button><button id="exportBtn">⇩ Exportar CSV</button><button id="exportPrincipalBtn" class="success">⇩ Exportar para Principal</button></div>
 <div class="shift-box">
   <div class="shift-title"><strong>Colaboradores por horário</strong><span id="shiftSource">Atualizando...</span></div>
   <table class="shift-table">
@@ -1244,4 +1244,59 @@ $('auditSheetsBtn').onclick=runSheetAudit;
 $('searchInput').addEventListener('input',e=>{let q=norm(e.target.value);if(q.length<2){$('searchResults').innerHTML='';return}let found=ROSTER.filter(p=>norm(p.nome).includes(q)).slice(0,8);$('searchResults').innerHTML=found.map(p=>`<div style="padding:8px 0;border-bottom:1px solid #edf1f5"><b>${esc(p.nome)}</b><br>Groot ID: ${esc(p.grootId||p.id)} <button class="success" style="padding:5px 8px;margin-left:6px" onclick="document.getElementById('codeInput').value='${esc(p.grootId||p.id)}';document.getElementById('markBtn').click()">Marcar</button></div>`).join('')||'Nenhum nome encontrado.'});
 $('lateToggle').onclick=()=>{$('latePanel').classList.toggle('open')};$('historyDate').value=nowParts().date;$('historyBtn').onclick=renderHistory;$('historyDate').addEventListener('change',renderHistory);$('historySearch').addEventListener('input',renderHistory);$('alertOkBtn').onclick=closePointAlert;$('alertOverlay').addEventListener('click',e=>{if(e.target===$('alertOverlay'))return});$('folgaNoBtn').onclick=()=>{let x=pendingFolgaMark;showResult(x&&x.p,x&&x.mode==='unknown'?'Registro cancelado: calendário de folga não configurado para esta data.':'Registro cancelado: colaborador está de folga hoje.',false);closeFolgaConfirm()};$('folgaYesBtn').onclick=async()=>{let x=pendingFolgaMark;if(!x)return;$('folgaOverlay').classList.remove('show');pendingFolgaMark=null;await registerPerson(x.p,x.source,x.mode==='folga');$('codeInput').value='';$('codeInput').focus()};updateClock();setInterval(updateClock,1000);
 window.addEventListener('online',async()=>{await loadRosterFromPrincipal(true);await render();syncPending()});window.addEventListener('offline',render);setInterval(syncPending,30000);setInterval(async()=>{if(navigator.onLine){await loadRosterFromPrincipal(true);await render()}},5000);(async()=>{await loadRosterFromPrincipal(true);await render();setTimeout(syncPending,600)})();
-</script></body></html>
+</script>
+<script id="kn-export-principal-v1">
+(function(){
+  function csvCell(v){
+    return '"' + String(v == null ? '' : v).replace(/"/g,'""') + '"';
+  }
+
+  function exportarParaPrincipal(){
+    var today = (typeof nowParts === 'function') ? nowParts().date : new Date().toISOString().slice(0,10);
+    var regs = (typeof loadRegs === 'function' ? loadRegs() : []).map(function(x){
+      return (typeof normalizeOld === 'function') ? normalizeOld(x) : x;
+    }).filter(function(x){
+      return x && x.date === today && (x.grootId || x.personId);
+    });
+
+    // Uma presença por pessoa. Se houver mais de um bip, preserva o primeiro.
+    var unique = new Map();
+    regs.forEach(function(x){
+      var id = String(x.grootId || x.personId || '').trim();
+      if(id && !unique.has(id)) unique.set(id, x);
+    });
+
+    if(!unique.size){
+      alert('Não há batidas de hoje para exportar.');
+      return;
+    }
+
+    var rows = [['data','groot_id','nome']];
+    unique.forEach(function(x,id){
+      rows.push([today, id, x.nome || '']);
+    });
+
+    var csv = rows.map(function(row){
+      return row.map(csvCell).join(';');
+    }).join('\r\n');
+
+    var blob = new Blob(['\ufeff' + csv], {type:'text/csv;charset=utf-8'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'BATIDAS_PARA_PRINCIPAL_' + today + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){
+      URL.revokeObjectURL(a.href);
+      a.remove();
+    },1000);
+
+    alert(unique.size + ' presença(s) de ' + today + ' exportada(s) para o Presença KN Principal.');
+  }
+
+  var btn = document.getElementById('exportPrincipalBtn');
+  if(btn) btn.addEventListener('click', exportarParaPrincipal);
+})();
+</script>
+
+</body></html>
