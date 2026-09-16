@@ -254,14 +254,13 @@ async function registerPerson(p,source='manual',trocaFolga=false){
     return false;
   }
 
+  // O Principal pode já ter recebido a presença automaticamente.
+  // Mesmo assim, uma leitura feita AGORA no Reserva precisa ficar gravada
+  // localmente para o arquivo de conferência/contingência.
+  let remoteExisting=null;
   if(navigator.onLine){
     try{
-      let remote=await principalGetExisting({personId:pid,date:n.date});
-      if(remote&&['P','TF','AT'].includes(String(remote.status||'').toUpperCase())){
-        showResult(p,'Ponto já existente no sistema principal.',true);
-        showPointAlert('Ponto já registrado hoje.','O sistema principal já possui registro deste colaborador nesta data. Nenhum novo ponto foi criado.','attention');
-        return false;
-      }
+      remoteExisting=await principalGetExisting({personId:pid,date:n.date});
     }catch(e){}
   }
 
@@ -290,7 +289,7 @@ async function registerPerson(p,source='manual',trocaFolga=false){
     atrasoMinutos:(isLate&&div.minutes!=null)?div.minutes:0,
     comunicado:'',
     observacaoAtraso:'',
-    principalSync:'pending',
+    principalSync:(remoteExisting&&['P','TF','AT'].includes(String(remoteExisting.status||'').toUpperCase()))?'synced':'pending',
     sheetSync:'pending',
     principalError:'',
     sheetError:''
@@ -1245,57 +1244,53 @@ $('searchInput').addEventListener('input',e=>{let q=norm(e.target.value);if(q.le
 $('lateToggle').onclick=()=>{$('latePanel').classList.toggle('open')};$('historyDate').value=nowParts().date;$('historyBtn').onclick=renderHistory;$('historyDate').addEventListener('change',renderHistory);$('historySearch').addEventListener('input',renderHistory);$('alertOkBtn').onclick=closePointAlert;$('alertOverlay').addEventListener('click',e=>{if(e.target===$('alertOverlay'))return});$('folgaNoBtn').onclick=()=>{let x=pendingFolgaMark;showResult(x&&x.p,x&&x.mode==='unknown'?'Registro cancelado: calendário de folga não configurado para esta data.':'Registro cancelado: colaborador está de folga hoje.',false);closeFolgaConfirm()};$('folgaYesBtn').onclick=async()=>{let x=pendingFolgaMark;if(!x)return;$('folgaOverlay').classList.remove('show');pendingFolgaMark=null;await registerPerson(x.p,x.source,x.mode==='folga');$('codeInput').value='';$('codeInput').focus()};updateClock();setInterval(updateClock,1000);
 window.addEventListener('online',async()=>{await loadRosterFromPrincipal(true);await render();syncPending()});window.addEventListener('offline',render);setInterval(syncPending,30000);setInterval(async()=>{if(navigator.onLine){await loadRosterFromPrincipal(true);await render()}},5000);(async()=>{await loadRosterFromPrincipal(true);await render();setTimeout(syncPending,600)})();
 </script>
-<script id="kn-export-principal-v1">
+<script id="kn-export-principal-v2">
 (function(){
   function csvCell(v){
     return '"' + String(v == null ? '' : v).replace(/"/g,'""') + '"';
   }
-
   function exportarParaPrincipal(){
-    var today = (typeof nowParts === 'function') ? nowParts().date : new Date().toISOString().slice(0,10);
-    var regs = (typeof loadRegs === 'function' ? loadRegs() : []).map(function(x){
-      return (typeof normalizeOld === 'function') ? normalizeOld(x) : x;
-    }).filter(function(x){
-      return x && x.date === today && (x.grootId || x.personId);
+    var today=(typeof nowParts==='function')?nowParts().date:new Date().toLocaleDateString('sv-SE');
+    var hist=document.getElementById('historyDate');
+    var targetDate=(hist && hist.value) ? hist.value : today;
+
+    var all=(typeof loadRegs==='function'?loadRegs():[]).map(function(x){
+      return (typeof normalizeOld==='function')?normalizeOld(x):x;
     });
 
-    // Uma presença por pessoa. Se houver mais de um bip, preserva o primeiro.
-    var unique = new Map();
+    // Somente BATIDAS realmente guardadas no Reserva.
+    var regs=all.filter(function(x){
+      return x && String(x.date||'')===targetDate && String(x.personId||x.grootId||'').trim();
+    });
+
+    var unique=new Map();
     regs.forEach(function(x){
-      var id = String(x.grootId || x.personId || '').trim();
-      if(id && !unique.has(id)) unique.set(id, x);
+      var id=String(x.grootId||x.personId||'').trim();
+      if(id && !unique.has(id)) unique.set(id,x);
     });
 
     if(!unique.size){
-      alert('Não há batidas de hoje para exportar.');
+      alert('Não há batidas SALVAS NO RESERVA em '+targetDate+' para exportar.\n\n'+
+            'Observação: registros que aparecem apenas porque vieram do Principal não contam como uma batida local do Reserva.');
       return;
     }
 
-    var rows = [['data','groot_id','nome']];
+    var rows=[['data','groot_id','nome']];
     unique.forEach(function(x,id){
-      rows.push([today, id, x.nome || '']);
+      rows.push([targetDate,id,x.nome||'']);
     });
 
-    var csv = rows.map(function(row){
-      return row.map(csvCell).join(';');
-    }).join('\r\n');
-
-    var blob = new Blob(['\ufeff' + csv], {type:'text/csv;charset=utf-8'});
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'BATIDAS_PARA_PRINCIPAL_' + today + '.csv';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function(){
-      URL.revokeObjectURL(a.href);
-      a.remove();
-    },1000);
-
-    alert(unique.size + ' presença(s) de ' + today + ' exportada(s) para o Presença KN Principal.');
+    var csv=rows.map(function(row){return row.map(csvCell).join(';');}).join('\r\n');
+    var blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='BATIDAS_PARA_PRINCIPAL_'+targetDate+'.csv';
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},1000);
+    alert(unique.size+' batida(s) SALVA(S) NO RESERVA em '+targetDate+' exportada(s).');
   }
-
-  var btn = document.getElementById('exportPrincipalBtn');
-  if(btn) btn.addEventListener('click', exportarParaPrincipal);
+  var btn=document.getElementById('exportPrincipalBtn');
+  if(btn)btn.addEventListener('click',exportarParaPrincipal);
 })();
 </script>
 
