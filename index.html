@@ -282,12 +282,13 @@ async function registerPerson(p,source='manual',trocaFolga=false){
     createdAt:n.iso,
     source,
     deviceId:deviceId(),
-    status:trocaFolga?'TF':(isLate?'AT':'P'),
+    status:trocaFolga?'TF':'P',
     trocaFolga:!!trocaFolga,
     divergenciaHorario:div.has?div.type:'',
     divergenciaMinutos:div.minutes,
     atrasoPrincipal:isLate,
     atrasoMinutos:(isLate&&div.minutes!=null)?div.minutes:0,
+    atrasoSomenteInformativo:true,
     comunicado:'',
     observacaoAtraso:'',
     principalSync:'pending',
@@ -299,7 +300,7 @@ async function registerPerson(p,source='manual',trocaFolga=false){
   regs.unshift(r);
   saveRegs(regs);
 
-  let msg=(trocaFolga?'Troca de folga registrada':(isLate?'Atraso registrado':'Presença registrada'))+' às '+r.time+'.';
+  let msg=(trocaFolga?'Troca de folga registrada':'Presença registrada')+' às '+r.time+'.';
   if(div.has) msg+=' '+div.message;
   else msg+=' Horário cadastrado: '+div.shift+'.';
 
