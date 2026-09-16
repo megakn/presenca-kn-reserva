@@ -90,7 +90,7 @@ footer{background:linear-gradient(90deg,#052c54,#0b4f86);color:#d6e9fa;padding:1
 </section>
 <section class="card"><div class="neon-panel"><div class="neon-head"><div><h2>Painel de presença</h2><div class="neon-sub">Acompanhamento em tempo real</div></div><div class="live-pill"><span id="netDot" class="dot"></span><span id="netText"></span></div></div><div class="stats"><div class="stat"><b id="todayCount">0</b><span>presenças hoje</span></div><div class="stat"><b id="pendingCount">0</b><span>com pendência</span></div><div class="stat"><b id="rosterCount">0</b><span>colaboradores</span></div></div></div>
 <div class="destinations"><div class="dest"><strong>🏢 Sistema principal</strong><span id="principalText">Verificando...</span></div><div class="dest"><strong>📊 Google Sheets</strong><span id="sheetText">Verificando...</span></div></div>
-<div class="compact-actions"><button id="retryBtn">↻ Sincronizar</button><button id="exportBtn">⇩ Exportar CSV</button><button id="exportPrincipalBtn" class="success">⇩ Exportar para Principal</button></div>
+<div class="compact-actions"><button id="retryBtn">↻ Sincronizar</button><button id="exportBtn">⇩ Exportar CSV</button><button id="exportPrincipalBtn" class="success" onclick="exportPrincipalFromTodayScreen()">⇩ Exportar para Principal</button></div>
 <div class="shift-box">
   <div class="shift-title"><strong>Colaboradores por horário</strong><span id="shiftSource">Atualizando...</span></div>
   <table class="shift-table">
@@ -254,13 +254,14 @@ async function registerPerson(p,source='manual',trocaFolga=false){
     return false;
   }
 
-  // O Principal pode já ter recebido a presença automaticamente.
-  // Mesmo assim, uma leitura feita AGORA no Reserva precisa ficar gravada
-  // localmente para o arquivo de conferência/contingência.
-  let remoteExisting=null;
   if(navigator.onLine){
     try{
-      remoteExisting=await principalGetExisting({personId:pid,date:n.date});
+      let remote=await principalGetExisting({personId:pid,date:n.date});
+      if(remote&&['P','TF','AT'].includes(String(remote.status||'').toUpperCase())){
+        showResult(p,'Ponto já existente no sistema principal.',true);
+        showPointAlert('Ponto já registrado hoje.','O sistema principal já possui registro deste colaborador nesta data. Nenhum novo ponto foi criado.','attention');
+        return false;
+      }
     }catch(e){}
   }
 
@@ -289,7 +290,7 @@ async function registerPerson(p,source='manual',trocaFolga=false){
     atrasoMinutos:(isLate&&div.minutes!=null)?div.minutes:0,
     comunicado:'',
     observacaoAtraso:'',
-    principalSync:(remoteExisting&&['P','TF','AT'].includes(String(remoteExisting.status||'').toUpperCase()))?'synced':'pending',
+    principalSync:'pending',
     sheetSync:'pending',
     principalError:'',
     sheetError:''
@@ -1234,6 +1235,35 @@ async function render(){
   renderHistory();
   renderShiftTable(true,dayData);
 }
+
+async function exportPrincipalFromTodayScreen(){
+  try{
+    const dayData=await getTodayOperationalData();
+    const today=dayData.today;
+    const byId=new Map();
+    (dayData.localRegs||[]).filter(r=>isValidCalendarTodayLocal(r,today)).forEach(r=>{
+      const id=String(r.personId||r.grootId||'').trim(); if(!id)return;
+      const p=ROSTER.find(x=>String(x.id||x.grootId)===id);
+      byId.set(id,{data:today,grootId:p?String(p.grootId||p.id):String(r.grootId||id),nome:p?p.nome:(r.nome||'')});
+    });
+    (dayData.remote||[]).forEach(rr=>{
+      const id=String(rr.colaborador_id||'').trim(); if(!id||byId.has(id))return;
+      const p=ROSTER.find(x=>String(x.id||x.grootId)===id);
+      byId.set(id,{data:today,grootId:p?String(p.grootId||p.id):id,nome:p?p.nome:('Colaborador ID '+id)});
+    });
+    if(!byId.size){alert('Não há registros em "Batidas de hoje" para exportar.');return;}
+    const cell=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+    const rows=[['data','groot_id','nome']];
+    byId.forEach(x=>rows.push([x.data,x.grootId,x.nome]));
+    const csv=rows.map(row=>row.map(cell).join(';')).join('\r\n');
+    const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download='BATIDAS_PARA_PRINCIPAL_'+today+'.csv';
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);
+    alert(byId.size+' registro(s) de "Batidas de hoje" exportado(s) para conferência no Principal.');
+  }catch(e){console.error(e);alert('Não foi possível exportar as batidas da tela.\n'+(e?.message||e));}
+}
 function exportCsv(){let regs=loadRegs().map(normalizeOld);let rows=[['event_id','groot_id','matricula','ext','nome','escala','data','hora','origem','dispositivo','principal_sync','sheets_sync','divergencia_tipo','divergencia_minutos'],...regs.map(r=>[r.eventId,r.grootId,r.matricula,r.ext,r.nome,r.escala,r.date,r.time,'RESERVA',r.deviceId,r.principalSync,r.sheetSync,r.divergenciaHorario||'',r.divergenciaMinutos??''])];let csv=rows.map(row=>row.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\n');let blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='presenca_kn_reserva_v4_'+nowParts().date+'.csv';a.click();URL.revokeObjectURL(a.href)}
 async function startCamera(){if(!('BarcodeDetector' in window)){showResult(null,'Este navegador não oferece leitura nativa por câmera. Use Chrome atualizado ou digite o código.',false);showPointAlert('Leitor de QR indisponível.','Este navegador não oferece leitura nativa por câmera. Use Chrome atualizado ou digite o código.');return}try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});$('video').srcObject=stream;await $('video').play();$('cameraWrap').style.display='block';scanning=true;scanLoop()}catch(e){showResult(null,'Não foi possível abrir a câmera. Verifique a permissão do navegador.',false);showPointAlert('Câmera não disponível.','Verifique a permissão da câmera no navegador e tente novamente.')}}
 function stopCamera(){scanning=false;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$('cameraWrap').style.display='none'}
@@ -1243,55 +1273,4 @@ $('auditSheetsBtn').onclick=runSheetAudit;
 $('searchInput').addEventListener('input',e=>{let q=norm(e.target.value);if(q.length<2){$('searchResults').innerHTML='';return}let found=ROSTER.filter(p=>norm(p.nome).includes(q)).slice(0,8);$('searchResults').innerHTML=found.map(p=>`<div style="padding:8px 0;border-bottom:1px solid #edf1f5"><b>${esc(p.nome)}</b><br>Groot ID: ${esc(p.grootId||p.id)} <button class="success" style="padding:5px 8px;margin-left:6px" onclick="document.getElementById('codeInput').value='${esc(p.grootId||p.id)}';document.getElementById('markBtn').click()">Marcar</button></div>`).join('')||'Nenhum nome encontrado.'});
 $('lateToggle').onclick=()=>{$('latePanel').classList.toggle('open')};$('historyDate').value=nowParts().date;$('historyBtn').onclick=renderHistory;$('historyDate').addEventListener('change',renderHistory);$('historySearch').addEventListener('input',renderHistory);$('alertOkBtn').onclick=closePointAlert;$('alertOverlay').addEventListener('click',e=>{if(e.target===$('alertOverlay'))return});$('folgaNoBtn').onclick=()=>{let x=pendingFolgaMark;showResult(x&&x.p,x&&x.mode==='unknown'?'Registro cancelado: calendário de folga não configurado para esta data.':'Registro cancelado: colaborador está de folga hoje.',false);closeFolgaConfirm()};$('folgaYesBtn').onclick=async()=>{let x=pendingFolgaMark;if(!x)return;$('folgaOverlay').classList.remove('show');pendingFolgaMark=null;await registerPerson(x.p,x.source,x.mode==='folga');$('codeInput').value='';$('codeInput').focus()};updateClock();setInterval(updateClock,1000);
 window.addEventListener('online',async()=>{await loadRosterFromPrincipal(true);await render();syncPending()});window.addEventListener('offline',render);setInterval(syncPending,30000);setInterval(async()=>{if(navigator.onLine){await loadRosterFromPrincipal(true);await render()}},5000);(async()=>{await loadRosterFromPrincipal(true);await render();setTimeout(syncPending,600)})();
-</script>
-<script id="kn-export-principal-v2">
-(function(){
-  function csvCell(v){
-    return '"' + String(v == null ? '' : v).replace(/"/g,'""') + '"';
-  }
-  function exportarParaPrincipal(){
-    var today=(typeof nowParts==='function')?nowParts().date:new Date().toLocaleDateString('sv-SE');
-    var hist=document.getElementById('historyDate');
-    var targetDate=(hist && hist.value) ? hist.value : today;
-
-    var all=(typeof loadRegs==='function'?loadRegs():[]).map(function(x){
-      return (typeof normalizeOld==='function')?normalizeOld(x):x;
-    });
-
-    // Somente BATIDAS realmente guardadas no Reserva.
-    var regs=all.filter(function(x){
-      return x && String(x.date||'')===targetDate && String(x.personId||x.grootId||'').trim();
-    });
-
-    var unique=new Map();
-    regs.forEach(function(x){
-      var id=String(x.grootId||x.personId||'').trim();
-      if(id && !unique.has(id)) unique.set(id,x);
-    });
-
-    if(!unique.size){
-      alert('Não há batidas SALVAS NO RESERVA em '+targetDate+' para exportar.\n\n'+
-            'Observação: registros que aparecem apenas porque vieram do Principal não contam como uma batida local do Reserva.');
-      return;
-    }
-
-    var rows=[['data','groot_id','nome']];
-    unique.forEach(function(x,id){
-      rows.push([targetDate,id,x.nome||'']);
-    });
-
-    var csv=rows.map(function(row){return row.map(csvCell).join(';');}).join('\r\n');
-    var blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});
-    var a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);
-    a.download='BATIDAS_PARA_PRINCIPAL_'+targetDate+'.csv';
-    document.body.appendChild(a); a.click();
-    setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},1000);
-    alert(unique.size+' batida(s) SALVA(S) NO RESERVA em '+targetDate+' exportada(s).');
-  }
-  var btn=document.getElementById('exportPrincipalBtn');
-  if(btn)btn.addEventListener('click',exportarParaPrincipal);
-})();
-</script>
-
-</body></html>
+</script></body></html>
