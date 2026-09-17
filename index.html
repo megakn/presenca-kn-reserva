@@ -155,18 +155,45 @@ async function loadRosterFromPrincipal(force=false){
     const rows=await res.json();
     if(!Array.isArray(rows)) throw new Error('Resposta inválida do cadastro principal');
 
-    const live=rows
-      .filter(r=>r && r.ativo===true)
-      .map(r=>({
-        id:String(r.id??''),
-        grootId:String(r.groot_id??r.id??''),
-        nome:String(r.nome??'').trim(),
-        matricula:String(r.matricula??''),
-        ext:String(r.ext??''),
-        escala:String(r.escala??''),
-        horario:String(r.horario??'')
-      }))
-      .filter(r=>r.id && r.nome);
+    // O Principal e o Reserva ficam no mesmo domínio (megakn.github.io).
+    // Por isso o Reserva usa a fotografia salva pelo Presença KN Principal
+    // como lista autoritativa de colaboradores ativos. Isso impede que linhas
+    // antigas ainda marcadas como ativo=true no Supabase façam 359 voltar a 369.
+    let principalSnapshot=null;
+    try{
+      const saved=JSON.parse(localStorage.getItem('presenca:roster:v1')||'null');
+      if(Array.isArray(saved) && saved.length) principalSnapshot=saved;
+    }catch(_e){}
+
+    let live;
+    if(principalSnapshot && principalSnapshot.length){
+      live=principalSnapshot
+        .filter(r=>r && r.id!=null && String(r.nome||'').trim())
+        .map(r=>({
+          id:String(r.id??''),
+          grootId:String(r.grootId??r.groot_id??r.id??''),
+          nome:String(r.nome??'').trim(),
+          matricula:String(r.matricula??''),
+          ext:String(r.ext??''),
+          escala:String(r.escala??''),
+          horario:String(r.horario??'')
+        }));
+      rosterSource='principal';
+    }else{
+      live=rows
+        .filter(r=>r && r.ativo===true)
+        .map(r=>({
+          id:String(r.id??''),
+          grootId:String(r.groot_id??r.id??''),
+          nome:String(r.nome??'').trim(),
+          matricula:String(r.matricula??''),
+          ext:String(r.ext??''),
+          escala:String(r.escala??''),
+          horario:String(r.horario??'')
+        }))
+        .filter(r=>r.id && r.nome);
+      rosterSource='banco';
+    }
 
     if(!live.length) throw new Error('Cadastro principal retornou 0 colaboradores ativos');
 
@@ -174,7 +201,7 @@ async function loadRosterFromPrincipal(force=false){
     // Assim TODAS as funções existentes passam a usar automaticamente
     // o cadastro oficial do banco: busca, Groot ID, cards e tabela por horário.
     ROSTER.splice(0,ROSTER.length,...live);
-    rosterSource='banco';
+    if(rosterSource!=='principal') rosterSource='banco';
     rosterLastLoad=Date.now();
     return true;
   }catch(e){
@@ -1161,7 +1188,7 @@ async function renderShiftTable(force=false,data=null){
   try{
     const d=data||await getTodayOperationalData();
     drawShiftRows(d.rows);
-    $('shiftSource').textContent=(rosterSource==='banco'?'Cadastro Principal • ':'Cadastro local • ')+d.source+' • hoje';
+    $('shiftSource').textContent=((rosterSource==='principal'||rosterSource==='banco')?'Cadastro Principal • ':'Cadastro local • ')+d.source+' • hoje';
   }finally{
     shiftRefreshBusy=false;
   }
