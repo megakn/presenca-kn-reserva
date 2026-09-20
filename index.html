@@ -1201,7 +1201,7 @@ async function renderShiftTable(force=false,data=null){
 async function render(){
   let regs=loadRegs().map(normalizeOld),today=nowParts().date,todayRegs=regs.filter(r=>isValidCalendarTodayLocal(r,today));
 
-  $('rosterCount').textContent=ROSTER.length;
+  $('rosterCount').textContent=ROSTER.filter(p=>norm(p.nome)!=='isis costa de mello').length; // HC oficial: mantém Isis para teste, mas não conta no card
   $('netDot').className='dot '+(navigator.onLine?'online':'offline');
   $('netText').textContent=navigator.onLine?'Online':'Offline';
 
