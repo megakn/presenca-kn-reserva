@@ -358,12 +358,12 @@ async function syncPrincipal(r){
       body:JSON.stringify({
         colaborador_id:String(r.personId),
         data:String(r.date),
-        status:r.trocaFolga?'TF':(r.atrasoPrincipal?'AT':'P'),
+        status:r.trocaFolga?'TF':'P',
         hora:String(r.time),
         // Guarda a divergência de horário (atraso/entrada antecipada/escala
         // não identificada) mesmo sem mostrar alerta — fica salva no
-        // Principal e cai na planilha, pra dar pra revisar depois quem
-        // bateu fora da escala cadastrada e corrigir o cadastro.
+        // Principal sem alterar o status da presença. O atraso continua salvo
+        // como divergência para consulta no Reserva, mas na Presença KN entra como P.
         divergencia_tipo:r.divergenciaHorario||null,
         divergencia_minutos:(r.divergenciaMinutos!=null?r.divergenciaMinutos:null)
       })
