@@ -343,7 +343,7 @@ async function principalGetExisting(r){
 async function syncPrincipal(r){
   try{
     const existing=await principalGetExisting(r);
-    if(existing && ['P','TF','AT'].includes(String(existing.status||'').toUpperCase())){
+    if(existing && String(existing.status||'').toUpperCase()==='P'){
       return {ok:true,duplicate:true,existingTime:existing.hora||''};
     }
     const url=SUPABASE_URL+'/rest/v1/'+TB_REG+'?on_conflict=colaborador_id,data';
@@ -358,12 +358,11 @@ async function syncPrincipal(r){
       body:JSON.stringify({
         colaborador_id:String(r.personId),
         data:String(r.date),
-        status:r.trocaFolga?'TF':'P',
+        status:'P', // REGRA: toda batida válida do Reserva entra como PRESENÇA no Presença KN
         hora:String(r.time),
-        // Guarda a divergência de horário (atraso/entrada antecipada/escala
-        // não identificada) mesmo sem mostrar alerta — fica salva no
-        // Principal sem alterar o status da presença. O atraso continua salvo
-        // como divergência para consulta no Reserva, mas na Presença KN entra como P.
+        // O Reserva mantém atraso/troca/folga para controle interno.
+        // No Presença KN, qualquer batida válida é sempre PRESENÇA.
+        // A divergência de horário continua salva apenas como informação complementar.
         divergencia_tipo:r.divergenciaHorario||null,
         divergencia_minutos:(r.divergenciaMinutos!=null?r.divergenciaMinutos:null)
       })
