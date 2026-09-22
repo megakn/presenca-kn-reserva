@@ -809,15 +809,12 @@ function isValidCalendarTodayRemote(row,today){
 }
 
 function isValidCalendarTodayLocal(rec,today){
+  // REGRA DO RESERVA: se a batida foi feita neste aparelho na data de calendário
+  // de hoje, ela precisa continuar visível e contabilizada mesmo após 00:00.
+  // A escala (22:30/23:00) não pode apagar uma batida real feita depois da meia-noite.
   if(String((rec&&rec.date)||'')!==String(today)) return false;
   const punchMin=timeToMinutes((rec&&rec.time)||'');
   if(punchMin<0) return false;
-  const id=String((rec&&rec.personId)||(rec&&rec.grootId)||'');
-  const p=ROSTER.find(x=>String(x.id||x.grootId)===id);
-  if(p){
-    const shiftMin=timeToMinutes(normalizeShiftTime(p));
-    if(shiftMin>=18*60 && punchMin<12*60) return false;
-  }
   return punchMin<=currentMinutes()+2;
 }
 
