@@ -785,25 +785,16 @@ function isPreviousDayNightCarryover(row,today){
 }
 
 function isValidCalendarTodayRemote(row,today){
-  // O painel "hoje" usa a DATA REAL do calendário.
+  // REGRA CORRIGIDA:
+  // se o Principal gravou a batida com a DATA REAL de hoje, ela pertence
+  // ao painel de hoje, independentemente do turno cadastrado (inclusive 22:30/23:00).
   if(String((row&&row.data)||'')!==String(today)) return false;
 
   const punchMin=timeToMinutes((row&&row.hora)||'');
   if(punchMin<0) return false;
 
   const nowMin=currentMinutes();
-  if(punchMin>nowMin+2) return false; // não aceita horário futuro como presença de hoje
-
-  // Regra importante da virada do dia:
-  // colaboradores cuja jornada começa 22:30/23:00 e batem após 00:00 ainda
-  // pertencem ao turno iniciado no DIA ANTERIOR. Esses registros não podem
-  // permanecer no painel "hoje" depois da meia-noite.
-  const id=String((row&&row.colaborador_id)||'');
-  const p=ROSTER.find(x=>String(x.id||x.grootId)===id);
-  if(p){
-    const shiftMin=timeToMinutes(normalizeShiftTime(p));
-    if(shiftMin>=18*60 && punchMin<12*60) return false;
-  }
+  if(punchMin>nowMin+2) return false; // não aceita horário futuro
 
   return true;
 }
