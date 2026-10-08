@@ -266,7 +266,9 @@ async function registerPerson(p,source='manual',trocaFolga=false){
   if(navigator.onLine){
     try{
       let remote=await principalGetExisting({personId:pid,date:n.date});
-      if(remote&&['P','TF','AT'].includes(String(remote.status||'').toUpperCase())){
+      // P marcado à mão no app principal (hora sem segundos) NÃO bloqueia a
+      // bipada: quem bipa o QR tem que ir pra planilha.
+      if(remote&&['P','TF','AT'].includes(String(remote.status||'').toUpperCase())&&!(String(remote.status||'').toUpperCase()==='P'&&!isBipeHora(remote.hora))){
         showResult(p,'Ponto já existente no sistema principal.',true);
         showPointAlert('Ponto já registrado hoje.','O sistema principal já possui registro deste colaborador nesta data. Nenhum novo ponto foi criado.','attention');
         return false;
@@ -341,10 +343,14 @@ async function principalGetExisting(r){
   return Array.isArray(rows)&&rows.length?rows[0]:null;
 }
 
+// Hora com segundos (07:58:12) = batida do bipe/Reserva. Sem segundos
+// (07:58) = P marcado à mão no app principal. Só bipada vai pra planilha.
+function isBipeHora(h){return /^\d{2}:\d{2}:\d{2}$/.test(String(h||'').trim())}
+
 async function syncPrincipal(r){
   try{
     const existing=await principalGetExisting(r);
-    if(existing && String(existing.status||'').toUpperCase()==='P'){
+    if(existing && String(existing.status||'').toUpperCase()==='P' && isBipeHora(existing.hora)){
       return {ok:true,duplicate:true,existingTime:existing.hora||''};
     }
     const url=SUPABASE_URL+'/rest/v1/'+TB_REG+'?on_conflict=colaborador_id,data';
@@ -397,7 +403,8 @@ async function checkSheetSynced(r){
     const rows=await res.json();
     const row=Array.isArray(rows)&&rows.length?rows[0]:null;
     if(row&&row.sheet_synced===true) return {confirmed:true};
-    return {confirmed:false,error:(row&&row.sheet_error)||'Aguardando o Supabase confirmar a gravação na planilha'};
+    const se=String((row&&row.sheet_error)||'');
+    return {confirmed:false,error:(se&&!/^reenviar/i.test(se))?se:(se?'Reenviando para a planilha…':'Aguardando o Supabase confirmar a gravação na planilha')};
   }catch(e){
     return {confirmed:false,error:String((e&&e.message)||e)};
   }
@@ -1069,9 +1076,8 @@ async function checkOneInSheet(item){
   }
 }
 
-// "Reenviar à planilha" agora funciona regravando o próprio registro no
-// Supabase (mesmos dados, forçando um UPDATE) — isso dispara de novo o
-// Database Webhook que aciona o Apps Script. Não fala mais direto com o
+// "Reenviar à planilha": marca a linha no Supabase pra ser reenviada — o
+// gatilho de UPDATE aciona o Apps Script de novo. Não fala direto com o
 // Google, então funciona mesmo em aparelhos com rede restrita.
 async function resendToSheet(item){
   try{
@@ -1088,20 +1094,27 @@ async function resendToSheet(item){
     const cur=Array.isArray(rows)&&rows.length?rows[0]:null;
     if(!cur) return {ok:false,error:'Registro não encontrado no Principal'};
 
-    const url=SUPABASE_URL+'/rest/v1/'+TB_REG+'?on_conflict=colaborador_id,data';
+    if(String(cur.status||'').toUpperCase()!=='P') return {ok:false,error:'No Principal este registro não está como P ('+(cur.status||'vazio')+')'};
+    if(!isBipeHora(cur.hora)) return {ok:false,error:'Presença marcada à mão no app principal (não bipada) — não vai pra planilha'};
+
+    // Antes isso regravava os mesmos dados esperando disparar o gatilho, mas
+    // o gatilho do Supabase só reagia a INSERT — o reenvio nunca chegava no
+    // Apps Script. Agora marca sheet_error='reenviar:<hora>', que o gatilho
+    // kn_sheet_sync_on_update (supabase_fix_sheet_trigger.sql) reconhece.
+    const url=SUPABASE_URL+'/rest/v1/'+TB_REG+
+      '?colaborador_id=eq.'+encodeURIComponent(String(item.personId))+
+      '&data=eq.'+encodeURIComponent(String(item.date));
     const res=await fetch(url,{
-      method:'POST',
+      method:'PATCH',
       headers:{
         'apikey':SUPABASE_ANON_KEY,
         'Authorization':'Bearer '+SUPABASE_ANON_KEY,
         'Content-Type':'application/json',
-        'Prefer':'resolution=merge-duplicates,return=minimal'
+        'Prefer':'return=minimal'
       },
       body:JSON.stringify({
-        colaborador_id:String(item.personId),
-        data:String(item.date),
-        status:cur.status||'',
-        hora:cur.hora||''
+        sheet_synced:false,
+        sheet_error:'reenviar:'+Date.now()
       })
     });
     if(!res.ok) throw new Error('Reenvio HTTP '+res.status);
